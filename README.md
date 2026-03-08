@@ -28,16 +28,17 @@ cd <project-dir> && claude
 └── Layer 3: Documentation (<project>/docs/)  ← SSOT 문서 5종
 ```
 
-## Skills (7 + 1)
+## Skills (8 + 1)
 
 | Skill | Phase | Purpose |
 |-------|-------|---------|
 | `/bootstrap-system` | Setup | 새 시스템에 체계 설치 + HPC 설정 |
 | `/init-project` | Setup | 새 프로젝트 scaffolding |
 | `/session-resume` | Daily | 세션 재개 시 context 복원 |
-| `/figure-plan` | Figure | Phase 1: narrative → design doc |
-| `/figure-implement` | Figure | Phase 2: design doc → code |
-| `/figure-review` | Figure | Phase 3: panels → P1-P7 review |
+| `/figure-plan` | Figure | Phase 1: narrative → design doc (P1-P16) |
+| `/figure-implement` | Figure | Phase 2: design doc → code (C1-C8 + V1-V9) |
+| `/figure-review` | Figure | Phase 3: top-down review (Layer 0-3) |
+| `/figure-assemble` | Figure | Phase 4: panels → assembled figure (journal specs) |
 | `/submit-job` | HPC | SLURM 제출 + 자동 로깅 |
 | `/check-status` | HPC | Job 상태 확인 + 문서 업데이트 |
 
@@ -51,9 +52,10 @@ cd <project-dir> && claude
 | `docs/PIPELINE.md` | Step별 실행 계획 |
 | `docs/JOB_LOG.md` | SLURM 제출/완료/실패 기록 |
 
-## Figure Methodology (P1-P7)
+## Figure Methodology (P1-P16)
 
 ```
+Structural (P1-P7)
 P1  FUNNEL      scope(P_{i+1}) <= scope(P_i)
 P2  EVIDENCE    dependency DAG = panel order
 P3  DATA-ONLY   every element maps to data
@@ -61,6 +63,25 @@ P4  EXHAUSTIVE  show N_total before K_selected
 P5  VARIANTS    >= 2 visualizations per panel
 P6  SSOT        all paths in registry
 P7  CONSISTENT  one palette, zero local overrides
+
+Visual Storytelling (P8-P13)
+P8  FOCUS       ONE focal point per panel (color/bold vs grey/alpha)
+P9  INK         remove non-data elements
+P10 GLANCE      message in <5 seconds without caption
+P11 ENCODE      visual channel first (position > color > size > shape > text)
+P12 TYPE        Helvetica 5-7pt body, 8pt bold lowercase panel labels
+P13 BREATHE     generous margins, max ~20 axis items
+
+Content & Logic (P14-P16)
+P14 CLAIM-MATCH visual pattern supports the stated claim
+P15 LOGIC-FLOW  panel sequence builds an argument
+P16 RESTRAINT   no overclaiming (NS≠trend, association≠causation)
+```
+
+## Figure Pipeline
+
+```
+/figure-plan → Design Doc → /figure-implement → panels/ → /figure-review → fix → /figure-assemble → assembled/
 ```
 
 ## Memory Management
@@ -84,6 +105,7 @@ claude-governance/
 │   ├── figure-plan/SKILL.md
 │   ├── figure-implement/SKILL.md
 │   ├── figure-review/SKILL.md
+│   ├── figure-assemble/SKILL.md
 │   ├── submit-job/SKILL.md
 │   └── check-status/SKILL.md
 └── blueprints/templates/
