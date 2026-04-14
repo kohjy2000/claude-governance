@@ -14,7 +14,7 @@ $ARGUMENTS:
 - optional `parallel` : run per-panel builds concurrently (default: sequential)
 
 ## Role
-**Per-figure orchestrator**. Reads Layer 1 (`docs_server/`) + Layer 2 (`docs_figure/`) and produces:
+**Per-figure orchestrator**. Reads Layer 1 (`docs/`) + Layer 2 (`docs_figure/`) and produces:
 - Per-panel artifacts via `/panel-build` (Layer 3b sub-orchestrator)
 - Cross-panel review and consistency enforcement
 - Final composite via `/figure-assemble`
@@ -26,7 +26,7 @@ Escalates Loop S (story arc / role failure) to user — does NOT auto-fix struct
 
 ```
 project_root/
-├── docs_server/                          ← Layer 1 (must exist)
+├── docs/                          ← Layer 1 (must exist)
 │   ├── STORY.md, CLAIM_STRUCTURE_v*.md
 │   ├── DATA_MAP.md
 │   └── ...
@@ -109,7 +109,7 @@ caps:
   - `docs_figure/FIGURE_BASELINE.md` (entity tier, palette)
   - `docs_figure/STYLE_GUIDE.md` (style conventions)
   - `docs_figure/SCRIPT_CATALOG.yml` (catalog lookup)
-  - Relevant `docs_server/` excerpts (CLAIM_STRUCTURE, STORY for Fig{N})
+  - Relevant `docs/` excerpts (CLAIM_STRUCTURE, STORY for Fig{N})
 - Output: `design_docs/Fig{N}_design.md`
   - Cross-panel arc (a → b → c → ... transitions)
   - Per-panel skeleton (visual primitive, data, catalog ref, expected number)
@@ -243,7 +243,7 @@ PHASE F5: /figure-assemble target=Fig{N}
 
 | Trigger | Phase | Action |
 |---------|-------|--------|
-| `docs_server/` or `docs_figure/` missing | F0 | STOP, instruct prerequisite |
+| `docs/` or `docs_figure/` missing | F0 | STOP, instruct prerequisite |
 | `Fig{N}_TARGET.md` missing | F0 | STOP, instruct `/figure-init` |
 | `Fig{N}_state.yml` exists, no `resume` arg | F0 | ASK resume / restart / abort |
 | Design doc Gate A fail (P1-P16 internal) | F1 | STOP, ESCALATE with diagnosis |

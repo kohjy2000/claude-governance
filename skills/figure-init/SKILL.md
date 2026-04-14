@@ -1,12 +1,16 @@
 ---
 name: figure-init
-description: Layer 2 setup that bridges project docs to figure pipeline. Reads docs_server/ + reference paper + catalog scripts → generates docs_figure/ (BASELINE, OVERVIEW, per-figure TARGETs, STYLE_GUIDE, SCRIPT_CATALOG). Run once per project; use `refresh` mode after narrative or reference changes.
+description: Layer 2 setup that bridges project docs to figure pipeline. Reads docs/ + reference paper + catalog scripts → generates docs_figure/ (BASELINE, OVERVIEW, per-figure TARGETs, STYLE_GUIDE, SCRIPT_CATALOG). Run once per project; use `refresh` mode after narrative or reference changes.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, Skill
 ---
 
 # /figure-init — Layer 2: Project Docs → Figure Docs
 
-$ARGUMENTS: project_root path (default cwd) | optional `refresh` | optional `figure_count=N`
+$ARGUMENTS:
+- optional `project_root=<path>` (default: cwd)
+- optional `docs=<path>` (override docs location; default: auto-detect `docs/` then `docs_server/`)
+- optional `refresh` (re-run mode)
+- optional `figure_count=N` (default: 5)
 
 ## Role
 **One-time-per-project** orchestrator that builds the figure-pipeline source-of-truth.
@@ -17,7 +21,7 @@ Layer 3 (`/figure-build target=Fig{N}`) consumes Layer 2 outputs.
 
 ```
 project_root/
-├── docs_server/                      ← from /project-init
+├── docs/                      ← from /project-init
 │   ├── README.md                     ← cohort, status, key parameters
 │   ├── STORY.md                      ← thesis, narrative
 │   ├── CLAIM_STRUCTURE_v*.md         ← claim hierarchy + numbers
@@ -31,7 +35,7 @@ project_root/
 └── ...
 ```
 
-If `docs_server/` missing → STOP, instruct user: "Run /project-init first."
+If `docs/` missing → STOP, instruct user: "Run /project-init first."
 If `reference/papers/` empty → WARN, fall back to generic Nature defaults.
 If `reference/catalog/` empty → WARN, SCRIPT_CATALOG.yml will be empty.
 
@@ -50,12 +54,30 @@ project_root/docs_figure/
 └── validation_report.md              ← only if validation issues detected
 ```
 
-Layer 3 (`/figure-build`) reads BOTH `docs_server/` (for narrative + data) AND `docs_figure/` (for tier + style + targets).
+Layer 3 (`/figure-build`) reads BOTH `docs/` (for narrative + data) AND `docs_figure/` (for tier + style + targets).
+
+## Input Location Detection
+
+Project docs location is detected with this priority:
+
+1. **Explicit arg**: `docs=<path>` → use this path
+2. **Canonical**: `<project_root>/docs/` (output of `/init-project` skill — standard)
+3. **Legacy alias**: `<project_root>/docs_server/` (some projects renamed to indicate server-side authoritative copy)
+4. If none → STOP, ASK user to specify
+
+The detected path is recorded as `PROJECT_DOCS_DIR` in `_meta` of all generated files.
+
+```
+arg priority:    docs=<path>  >  default detection
+default detect:  ./docs/  >  ./docs_server/  >  ERROR
+```
+
+Any subsequent reference in this skill (and downstream skills `/figure-build`, `/panel-build`, `/figure-plan`, etc.) uses the detected `PROJECT_DOCS_DIR`, not the literal string `docs/`.
 
 ## Process
 
 ### Step 1 — Validate inputs
-- Glob `docs_server/*.md` — required, fail if empty
+- Glob `docs/*.md` — required, fail if empty
 - Glob `reference/papers/*.pdf` — flag if empty
 - Glob `reference/catalog/**/*.R` (or `*.py`) — flag if empty
 - If `docs_figure/` exists and arg ≠ `refresh` → `AskUserQuestion`:
@@ -63,7 +85,7 @@ Layer 3 (`/figure-build`) reads BOTH `docs_server/` (for narrative + data) AND `
   - `no` → STOP; `abort` → STOP; `yes` → proceed in refresh mode
 
 ### Step 2 — Extract Entity Tier
-Parse `docs_server/README.md` "Cohort Structure" section + `STORY.md` cohort sections.
+Parse `docs/README.md` "Cohort Structure" section + `STORY.md` cohort sections.
 Classify each entity (e.g., diagnosis, cohort) by narrative role:
 
 | Tier | Definition | Identification heuristic |
@@ -144,7 +166,7 @@ If ≥1 validation issue → write `validation_report.md` and report to user.
 # Figure Pipeline Baseline
 Project: {project_name}
 Generated: {date} by /figure-init {version}
-Source: docs_server/{README,STORY,CLAIM_STRUCTURE,DATA_MAP}.md
+Source: docs/{README,STORY,CLAIM_STRUCTURE,DATA_MAP}.md
 
 ## Entity Tier
 
@@ -277,7 +299,7 @@ If user manually edited a file after last `/figure-init` run (mtime > generated_
 
 | Trigger | Action |
 |---------|--------|
-| `docs_server/` missing | STOP, instruct user to run `/project-init` first |
+| `docs/` missing | STOP, instruct user to run `/project-init` first |
 | Multiple `CLAIM_STRUCTURE_v*.md` versions | ASK which is canonical (default: latest version number) |
 | Entity tier ambiguous (>2 candidates for PRIMARY) | ASK with options |
 | Reference paper missing | WARN, fall back to Nature defaults, flag in BASELINE |

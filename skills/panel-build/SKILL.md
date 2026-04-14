@@ -30,7 +30,7 @@ project_root/
 │   ├── SCRIPT_CATALOG.yml
 │   └── figure_pipeline/
 │       └── design_docs/Fig{N}_design.md   ← panel section parsed
-├── docs_server/                            ← narrative + data
+├── docs/                            ← narrative + data
 └── code/00_common.R                        ← may be created/updated
 ```
 
@@ -99,7 +99,7 @@ Inputs to sub-skill:
 - Parent `Fig{N}_design.md` (panel section as anchor)
 - `STYLE_GUIDE.md` + `SCRIPT_CATALOG.yml` (catalog lookup for visual primitive)
 - `FIGURE_BASELINE.md` (entity tier, palette)
-- Relevant `docs_server/` excerpts (narrative claim text, expected numbers)
+- Relevant `docs/` excerpts (narrative claim text, expected numbers)
 
 Output: `design_docs/Fig{N}_{p}_design.md` (detailed):
 - Visual primitive selection (from CATALOG)
