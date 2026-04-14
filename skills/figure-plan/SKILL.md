@@ -20,12 +20,12 @@ Scientific figure architect. Narrative + claims를 design document로 변환.
 - `granularity=figure`: cross-panel arc + per-panel skeleton (used by /figure-build Phase F1)
 - `granularity=panel`: full panel detail with catalog reference (used by /panel-build Phase P1)
 
-Reads from Layer 2 (`docs_figure/`) and Layer 1 (`docs_server/`):
+Reads from Layer 2 (`docs_figure/`) and Layer 1 (`docs/`):
 - `docs_figure/FIGURE_BASELINE.md` — entity tier, palette, dims
 - `docs_figure/STYLE_GUIDE.md` — typography, color, layout norms
 - `docs_figure/SCRIPT_CATALOG.yml` — visual primitive ↔ script index (panel mode lookup)
 - `docs_figure/targets/Fig{N}_TARGET.md` — claims, expected panels, success criteria
-- `docs_server/STORY.md`, `CLAIM_STRUCTURE_v*.md`, `DATA_MAP.md`
+- `docs/STORY.md`, `CLAIM_STRUCTURE_v*.md`, `DATA_MAP.md`
 
 ## 16 Hard Rules
 
@@ -74,8 +74,8 @@ P16 RESTRAINT    no overclaiming — NS≠trend, association≠causation, subtit
 #### Step 1: Read inputs
 - `docs_figure/targets/Fig{N}_TARGET.md` → claims, expected panel count
 - `docs_figure/FIGURE_BASELINE.md` → entity tier + palette
-- `docs_server/CLAIM_STRUCTURE_v*.md` → claim text + expected numbers
-- `docs_server/STORY.md` (this figure's section) → narrative context
+- `docs/CLAIM_STRUCTURE_v*.md` → claim text + expected numbers
+- `docs/STORY.md` (this figure's section) → narrative context
 
 #### Step 2: Define figure role
 - LANDSCAPE / CORE / MECHANISM / EXTENSION / VALIDATION / SYNTHESIS
@@ -123,8 +123,8 @@ Used by `/panel-build` Phase P1 to flesh out one panel.
 - `docs_figure/SCRIPT_CATALOG.yml` → visual primitive options
 - `docs_figure/STYLE_GUIDE.md` → typography, color norms
 - `docs_figure/FIGURE_BASELINE.md` → palette refs
-- `docs_server/CLAIM_STRUCTURE_v*.md` → claim text + expected numbers
-- `docs_server/DATA_MAP.md` → SSOT path for data
+- `docs/CLAIM_STRUCTURE_v*.md` → claim text + expected numbers
+- `docs/DATA_MAP.md` → SSOT path for data
 
 #### Step 2: CATALOG LOOKUP (panel-level only)
 From parent skeleton's `Visual primitive (preliminary)`:
