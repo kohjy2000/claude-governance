@@ -1,16 +1,31 @@
 ---
 name: figure-review
-description: Phase 3 — Top-down figure review: Story Arc → Figure Role → Panel Content → Visual/Structural checks
-allowed-tools: Read, Bash, Glob, Grep
+description: Phase 3 — Top-down figure review (Story Arc → Figure Role → Panel Content → Visual/Structural). Supports two granularities: figure-level (Layer 0/1 cross-panel) and panel-level (Layer 2/3 single panel). Catalog cross-ref via paper_panel comparison; optional multi-modal review with rendered PNG inspection. Output verdicts drive iteration loops in /figure-build (Loop F) and /panel-build (Loops V, C).
+allowed-tools: Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion
 ---
 
 # /figure-review — Phase 3: Top-Down Figure Review
 
-$ARGUMENTS: figure 디렉토리 경로 또는 특정 figure 번호
+$ARGUMENTS:
+- `granularity=figure|panel` (default: figure)
+- `target=Fig{N}` (required)
+- `panel={letter}` (required when granularity=panel)
+- optional `catalog_xref=true|false` (default: true if SCRIPT_CATALOG.yml exists)
+- optional `multimodal=true|false` (default: false; requires Vision LM access)
 
 ## Role
 Scientific figure reviewer. **Story에서 시작하여 pixel로 내려가는** top-down 방식.
 Panel 체크리스트가 아니라, "이 figure set이 논문의 argument를 빌드업하는가"를 먼저 묻는다.
+
+**Granularity dispatch**:
+- `granularity=figure`: Layer 0 (story arc) + Layer 1 (figure role + cross-panel consistency)
+- `granularity=panel`: Layer 2 (P14-P16 content) + Layer 3 (P8-P13 visual) for one panel + catalog cross-ref + optional multi-modal
+
+**Verdict drives loops**:
+- Layer 0/1 FAIL → Loop S (escalate to user, no auto-fix)
+- Layer 2 FAIL → Loop C (re-plan, called by /panel-build)
+- Layer 3 FAIL → Loop V (re-implement, called by /panel-build)
+- Cross-panel FAIL (figure granularity) → Loop F (re-trigger affected panels, called by /figure-build)
 
 ## Review Layers (반드시 이 순서로 실행)
 
@@ -23,240 +38,204 @@ Layer 3: Visual & Structural (P1-P13) ← Panel별 체크리스트 (automated + 
 
 **Layer 0-1이 FAIL이면 Layer 2-3 결과는 무의미.** 구조가 틀리면 pixel을 고쳐봐야 소용없다.
 
----
+## Granularity = `figure` (Layer 0-1 + Cross-Panel)
 
-## Layer 0: Story Arc Review (Paper-Level)
+Used by `/figure-build` Phase F3.
 
-### 0-1. Narrative Chain 추출
-Design doc에서 paper-level story arc를 읽고, 각 figure의 **1-sentence message**를 추출한다.
+### Layer 0: Story Arc Review (Paper-Level)
+
+#### 0-1. Narrative Chain 추출
+Design doc + targets/Fig{N}_TARGET.md 에서 paper-level story arc 읽기.
 
 ```
 Fig1: "[message]"
 Fig2: "[message]"
-Fig3: "[message]"
 ...
 ```
 
-### 0-2. Argument Chain Test
-각 figure 사이에 **transition sentence**를 쓸 수 있는가?
+#### 0-2. Argument Chain Test
+각 figure 사이에 **transition sentence**:
 
 ```
-Fig1 → Fig2: "Fig1 conclusion이 Fig2의 전제가 되는가?"
-  sentence: "[Fig1 showed X] → [so naturally we ask Y] → [Fig2 answers Y]"
-Fig2 → Fig3: ...
-Fig3 → Fig4: ...
-Fig4 → Fig5: ...
+Fig1 → Fig2: "[Fig1 conclusion] → [so naturally we ask] → [Fig2 answers]"
 ```
 
-- PASS: 한 문장으로 자연스럽게 연결. 독자가 "다음에 뭘 보여줄지" 예측 가능.
-- FAIL: transition을 쓸 수 없거나, 독자가 "왜 갑자기 이걸?" 이라고 물을 수밖에 없음.
-- WARN: 연결은 되지만 비약이 있어서 bridging 설명이 필요.
+- PASS: 한 문장으로 자연스럽게 연결
+- FAIL: 비약 또는 무관
+- WARN: bridging 설명 필요
 
-### 0-3. Premise-Conclusion Chain
-각 figure의 결론(conclusion)과 다음 figure의 전제(premise)를 명시적으로 나열한다.
+#### 0-3. Premise-Conclusion Chain
+| Figure | Conclusion | Next Premise | Match |
+|--------|------------|-------------|-------|
 
-| Figure | Conclusion (독자가 이 figure 후 알게 되는 것) | Next Figure's Premise (다음 figure가 전제하는 것) | Match? |
-|--------|---------------------------------------------|--------------------------------------------------|--------|
+#### 0-4. Paper-Level Argument 1문장 요약
+"이 논문의 그림만 보고 도달할 수 있는 결론은: ____"
+Design doc의 intended conclusion과 비교. Gap 식별.
 
-- Match = PASS: conclusion이 premise를 충분히 커버
-- Partial = WARN: conclusion이 premise의 일부만 커버 (독자가 gap을 채워야 함)
-- Mismatch = FAIL: conclusion이 premise와 무관하거나 모순
+#### 0-5. 불필요한 Figure 검출
+"이 figure가 없으면 argument가 성립하는가?"
 
-### 0-4. Paper-Level Argument 1문장 요약
-전체 figure set을 본 후, 독자가 도달해야 할 최종 결론을 1문장으로:
-- "이 논문의 그림만 보고 도달할 수 있는 결론은: ____________"
-- Design doc의 intended conclusion과 비교.
-- Gap이 있으면 어느 figure에서 빠졌는지 식별.
+### Layer 1: Figure Role Review (Figure-Level)
 
-### 0-5. 불필요한 Figure 검출
-각 figure에 대해:
-- "이 figure가 없으면 argument가 성립하는가?"
-- YES → figure 삭제 또는 Supp 이동 고려
-- NO → 필수 figure
+#### 1-1. Figure 역할 정의
+LANDSCAPE / ZOOM / MECHANISM / VALIDATION / SYNTHESIS
 
----
-
-## Layer 1: Figure Role Review (Figure-Level)
-
-### 1-1. Figure 역할 정의
-각 figure가 argument에서 수행하는 역할을 명시:
-
-| Role | 설명 | 예시 |
-|------|------|------|
-| LANDSCAPE | 전체 데이터를 보여줌 (funnel 시작) | Fig2: 102,758 tests |
-| ZOOM | landscape에서 subset을 확대 | Fig2-E: M4 × SBS |
-| MECHANISM | HOW/WHY를 설명 | Fig3: CDT→DSB→LOH |
-| VALIDATION | 독립 데이터에서 재현 | Fig4: prediction + external |
-| SYNTHESIS | 여러 결과를 통합 정리 | Fig5: cross-cohort |
-
-### 1-2. Panel 필요성 심사 (Figure 내부)
+#### 1-2. Panel 필요성 심사 (Figure 내부)
 각 panel에 4가지 질문:
+1. **왜 여기 있는가?**
+2. **없으면 argument가 약해지는가?**
+3. **앞 panel의 결론에서 자연스럽게 이어지는가?**
+4. **다른 panel과 중복되는가?**
 
-1. **왜 여기 있는가?** — 이 panel이 figure의 argument에서 맡은 역할
-   - 답 불가 → 삭제 후보
-2. **없으면 argument가 약해지는가?** — 필수성
-   - NO → Supp 이동 후보
-3. **앞 panel의 결론에서 자연스럽게 이어지는가?** — 논리적 위치
-   - NO → 순서 재배치 또는 bridging 추가
-4. **다른 panel과 중복되는가?** — 유일성
-   - YES → merge 또는 한쪽 삭제
+#### 1-3. 표현 적절성 심사
+"이 claim을 전달하기에 **이 시각화가 최적인가?**"
 
-### 1-3. 표현 적절성 심사
-각 panel에 대해: "이 claim을 전달하기에 **이 시각화가 최적인가?**"
+(상세 기준은 Common Pitfalls 절 참고)
 
-| Claim 유형 | 좋은 표현 | 나쁜 표현 | 왜? |
-|------------|----------|----------|-----|
-| 극적 감소 (5490→52) | slopegraph, waterfall | bar chart | 시각적 "절벽"이 필요 |
-| 확산/집중 | Lorenz curve, Gini | manhattan | 불균등 분포가 곡선으로 보임 |
-| 효과 크기 + 불확실성 | forest + CI | dot chart without CI | CI 없으면 확실성 판단 불가 |
-| count 비교 (4 vs 0) | bar chart, annotation | 28-row forest | count는 bar가 직관적 |
-| 방향 전환 (sig→NS) | filled/hollow, mirror bar | table | 시각적 대비 필요 |
-| 전체 landscape | heatmap, category bar | 개별 나열 | 패턴 인식이 목적 |
-| null result (all NS) | p-histogram, compact summary | 48-row heatmap | "없다"를 보여주는 데 48행 불필요 |
-| replication status | concordance dot plot | tile+text table | shape/color encoding > text |
+#### 1-4. Figure 내부 Logic Flow
+Panel 순서의 argument chain. Transition sentence 가능한지.
 
-**Red flags:**
-- 시각화 선택이 claim 유형과 불일치 → "표현이 메시지를 방해한다"
-- 같은 정보를 다른 패널에서 이미 보여줌 → 중복
-- N_items >> 20 인데 message는 "몇 개만 sig" → Top-K로 축소
+#### 1-5. Panel Count 적정성
+Nature: 3-7 panels per main figure (8+ = 과밀)
+**Catalog/STYLE_GUIDE 가 다른 N 권장하면 그 값 우선**
 
-### 1-4. Figure 내부 Logic Flow
-Figure 내 panel 순서의 argument chain:
+### NEW: Cross-Panel Consistency Check (figure granularity)
 
-```
-For each figure:
-  Panel A conclusion: "..."
-  → Panel B premise: "..." (match? YES/NO/PARTIAL)
-  Panel B conclusion: "..."
-  → Panel C premise: "..." (match? YES/NO/PARTIAL)
-  ...
-```
+Layer 1 보강 항목:
+- **Palette 일관성**: 모든 panel의 NB 색상이 BASELINE의 `DX_PRIMARY[["NB"]]` 와 일치하는가?
+  - Grep panels 코드: `grep "DX_PRIMARY\|DX_SECONDARY"`
+  - Hardcoded hex가 있으면 FAIL
+- **Typography 일관성**: 모든 panel이 `theme_nature(base_size=N)` 동일 N 사용?
+- **Axis convention**: y-axis Dx 순서 (`DX_SPECTRUM_ORDER`) 동일?
+- **Composite feasibility**: panel 합 width <= 183mm AND height <= 247mm
+- **Legend 중복**: 모든 panel이 같은 legend 따로 그림? → composite-shared로 통합 권장
 
-Transition sentence를 각 panel 사이에 작성:
-- 쓸 수 있으면 PASS
-- 억지스러우면 WARN
-- 불가능하면 FAIL
+Cross-panel FAIL → Loop F trigger (figure-build)
 
-### 1-5. Panel Count 적정성
-- Nature: main figure당 3-7 panels가 적정. 8+ = 과밀
-- 각 figure panel 수 확인. 과밀 시 merge/split/supp 이동 제안.
+## Granularity = `panel` (Layer 2-3 + Catalog + Multi-modal)
 
----
+Used by `/panel-build` Phase P3.
 
-## Layer 2: Content & Logic Checks (P14-P16, Panel-Level)
+### Layer 2: Content & Logic Checks (P14-P16, Panel-Level)
 
-### Check 14: Claim-Match (P14)
+#### Check 14: Claim-Match (P14)
 **Visual + data inspection. Most critical panel-level check.**
-For each panel:
-1. Identify the panel's stated claim (from title/subtitle or design doc)
+
+For the panel:
+1. Identify the panel's stated claim (from design doc)
 2. Ask: "독자가 이 그림만 보고 이 claim에 도달할 수 있는가?"
 3. Check: 시각적 패턴 (slope, separation, overlap)이 claim을 직접 보여주는가?
-4. **Data verification**: claim의 수치가 실제 데이터/렌더링과 일치하는가?
+4. **Data verification**: claim의 수치가 실제 데이터와 일치하는가?
+5. **Assertion check (NEW)**: 코드 내 `assert_narrative()` 호출이 PASS 했는가?
+   - Read panel R script, check for `assert_narrative` blocks
+   - Run script (if not already) and check for assertion stop()
 
-- PASS: 시각적 패턴이 claim을 직관적으로 증명 + 수치 일치
-- FAIL-VISUAL: claim은 맞지만 그림에서 안 보임 → 시각화 재설계
-- FAIL-DATA: claim 수치가 데이터와 불일치 → claim 수정 필요
-- FAIL-ABSENT: claim이 아예 없음 (title만 있고 what-to-see 불명확)
+- PASS: 시각적 패턴 + 수치 + assertion 모두 일치
+- **FAIL-DATA**: 수치 불일치 (기존 narrative 수정 필요 vs data 재계산 필요)
+- **FAIL-VISUAL**: claim은 데이터와 맞지만 그림에서 안 보임 → Loop V 또는 design 재고
+- **FAIL-ABSENT**: claim 자체가 없음 (subtitle만 있고 message 불명)
 
-**Red flag questions:**
-- "이 패널의 시각적 패턴이 claim의 반대로도 해석될 수 있는가?" → ambiguity
-- "claim에 사용된 수치(3/3, 99.1%, 6×)가 렌더링된 그림에서 확인 가능한가?"
+#### Check 15: Logic Flow (P15)
+Panel의 prior dependency 확인 (panel-level은 single panel이라 cross-panel은 figure-level에서)
 
-### Check 15: Logic Flow (P15)
-(Layer 1-4에서 이미 수행. 여기서는 결과를 기록.)
-
-### Check 16: Restraint (P16)
+#### Check 16: Restraint (P16)
 **Title/subtitle/annotation text inspection.**
 ```bash
-# Code check: causal verbs (forbidden per AGENTS.md)
-grep -niE 'demonstrates|proves|causes|drives|induces|leads to' Fig*.R Supp*.R
+# Causal verbs (forbidden per AGENTS.md)
+grep -niE 'demonstrates|proves|causes|drives|induces|leads to' Fig{N}_{p}.R
 # 매치 = FAIL
 
-# Code check: overclaiming NS results
-grep -niE 'trend|suggestive|borderline|approaching' Fig*.R Supp*.R
-# 매치 = WARN (acceptable only if explicit p-value accompanies)
+# Overclaiming NS
+grep -niE 'trend|suggestive|borderline|approaching' Fig{N}_{p}.R
+# 매치 = WARN (acceptable only with explicit p-value)
 ```
 
 - PASS: "association", "correlated", "observed" only
-- PASS: NS 결과는 "NS (p=0.xx)" 명시
-- FAIL: causal verb 사용
-- FAIL: NS를 "trend"으로 표현하면서 p-value 미기재
-- WARN: "suggestive (p=0.096)" — p-value 동반이므로 acceptable but flag
+- PASS: NS는 "NS (p=0.xx)" 명시
+- FAIL: causal verb / NS overclaiming
+- WARN: "suggestive (p=0.096)" — p-value 동반시 acceptable but flag
 
-**Subtitle limitation check:**
-- 모든 NS 패널: subtitle에 "NS" 명시 필수
-- Observational 연구: 최소 1곳에 "observational" 또는 "association" 명시
-- External validation 실패: "not replicated" 또는 "NS in [cohort]" 명시
-
----
-
-## Layer 3: Visual & Structural Checks (P1-P13, Panel-Level)
-
-### Structural (P1-P7) — mostly automated
-
-#### P1 Funnel
-- 각 panel subtitle에서 scope 추출 → 단조감소 확인
-
-#### P2 Evidence Before Conclusion
-- dependency DAG = panel order
-
-#### P3 Data-Only
-- 화살표 다이어그램, 개념도, subjective grade 금지
-- table-as-figure (geom_tile+geom_text) = P3 FAIL
-
-#### P4 Exhaustive Before Selective
-- Subset panel은 선행 universe panel 필요
-
-#### P5 Multi-Variant
-```bash
-for panel in A B C D E F G H I; do
-  n=$(ls panels/Fig*_${panel}_*.png 2>/dev/null | wc -l)
-  echo "Panel $panel: $n variants $([ $n -ge 2 ] && echo OK || echo FAIL)"
-done
-```
-
-#### P6 SSOT Provenance
-```bash
-grep -n 'read_tsv\|read_csv\|fread' Fig*.R | grep -v 'SSOT\$'
-```
-
-#### P7 Cross-Figure Consistency
-- Hex literals outside 00_common = FAIL
-
-### Visual Storytelling (P8-P13) — visual + code
+### Layer 3: Visual & Structural Checks (P1-P13, Panel-Level)
 
 #### P8 Focal Point
-- [ ] focal element 있는가? (saturated color / larger size)
-- [ ] context = grey/transparent?
+- [ ] focal element visible (saturated color / larger size)
+- [ ] context = grey/transparent
 - FAIL: 전체 동일 색상/크기
 
 #### P9 Data-Ink
 ```bash
-grep -nE 'theme_bw|theme_grey|theme_classic|panel\.border.*element_rect|panel\.grid\.minor' Fig*.R Supp*.R
+grep -nE 'theme_bw|theme_grey|theme_classic.*\(\)|panel\.border.*element_rect|panel\.grid\.minor' Fig{N}_{p}.R
+# theme_bw/grey 매치 = FAIL (theme_nature() 사용 권장)
 ```
 
 #### P10 Glance Test
-- 5초 만에 캡션 없이 메시지 도달 가능한가?
+**Multi-modal optional**: 5초 만에 caption 없이 메시지 도달 가능한가?
+- 코드만 보고는 불가, rendered PNG 보고 판단 (multi-modal=true 필요)
 
 #### P11 Visual Encoding
 ```bash
-grep -nE "label.*[★✱\\*]|geom_text.*star|annotate.*\\*" Fig*.R Supp*.R
+grep -nE "label.*[★✱\\*]|geom_text.*star|annotate.*\\*" Fig{N}_{p}.R
+# 매치 = FAIL (filled vs hollow, color saturation으로 대체)
 ```
 
 #### P12 Typography
-- 5-7pt body, 8pt bold lowercase labels
+- `theme_nature(base_size = N)` 호출에서 N 추출
+- `geom_text(size = ...)` annotation 크기 일관성
+- Font hierarchy (8 > 7 > 6 > 5pt)
 
 #### P13 Breathing Room
-- axis items ≤ 20, no overlap
+- axis items count: `Read panel design`, count Top-K
+- `geom_text` overlap 가능성: rotated 45°? truncated? facet split?
 
----
+### NEW: Catalog Cross-Reference Check (panel granularity)
+
+If panel design has `catalog_ref` AND `paper_panel` set:
+
+1. **Locate paper PDF panel**:
+   - Read `reference/papers/*.pdf` at the page containing `paper_panel: "Fig 2b"` (use heuristic)
+   - Extract that panel image (`Read pdf pages=N`)
+
+2. **Compare to our rendered panel**:
+   - Side-by-side: paper panel (left) vs our `Fig{N}_{p}.png` (right)
+   - **Visual diff** (manual or vision LM):
+     - Same plot type? (heatmap vs heatmap ✓)
+     - Same focal pattern? (corner cluster, diagonal, etc.)
+     - Color palette family? (warm vs cool similar?)
+     - Annotation density? (paper has ~5 labels, ours has ~5 ✓)
+
+3. **Verdict**:
+   - **MATCH**: ours follows paper's pattern → PASS bonus
+   - **DIFFERENT_BUT_INTENTIONAL**: our narrative justified deviation (e.g., different data shape) → WARN
+   - **MISMATCH**: shouldn't differ → FAIL (likely catalog clone-modify error)
+
+If `paper_panel` not set in design (orphan panel) → skip cross-ref.
+
+### NEW: Multi-Modal Review (panel granularity, optional)
+
+If `multimodal=true` AND Vision LM access available:
+
+1. **Read rendered PNG**: `Read output/panels/Fig{N}_{p}.png`
+2. **Vision LM inspection** prompts:
+   - "Are any text labels overlapping in this figure?"
+   - "What is the visual focal point?"
+   - "Is the message clear within 5 seconds without reading caption?"
+   - "Identify potential color contrast issues"
+3. **Aggregate findings** into Layer 3 report
+
+This catches issues code review misses (label collision, color contrast, axis density visual perception).
 
 ## Output: Review Report
 
-리뷰는 Layer 순서대로 출력한다. Layer 0-1이 가장 중요.
+리뷰는 Layer 순서대로 출력. Layer 0-1이 가장 중요.
+
+### Granularity = `figure` Output Template
+`docs_figure/figure_pipeline/review_reports/Fig{N}_figure_iter{N}.md`:
 
 ```markdown
-# Figure Review Report
+# Figure Review Report (Figure-level)
+Target: Fig{N}
+Granularity: figure
+Iteration: {N}
 Date: <DATE>
 
 ═══════════════════════════════════════════════
@@ -264,107 +243,205 @@ Date: <DATE>
 ═══════════════════════════════════════════════
 
 ### Paper Story Arc
-Fig1: "[message]"
-Fig2: "[message]"
-...
+{per-figure messages}
 
 ### Cross-Figure Argument Chain
 | Transition | Sentence | Status |
 |------------|----------|--------|
-| Fig1→Fig2  | "[conclusion] → [question] → [answer]" | PASS/FAIL |
-| Fig2→Fig3  | ... | ... |
 
 ### Premise-Conclusion Match
 | Figure | Conclusion | Next Premise | Match? |
-|--------|------------|-------------|--------|
 
 ### Paper-Level Conclusion
 - Intended: "..."
-- Achievable from figures alone: "..."
-- Gap: <where the argument breaks>
+- Achievable: "..."
+- Gap: ...
 
 ═══════════════════════════════════════════════
 ## Layer 1: Figure Roles & Panel Necessity
 ═══════════════════════════════════════════════
 
-### FigX: [Role] — "[1-sentence message]"
+### Fig{N}: [Role] — "[message]"
 
-| Panel | Role in argument | Necessary? | Expression fit? | Redundant? | Verdict |
-|-------|-----------------|------------|-----------------|------------|---------|
+| Panel | Role | Necessary? | Expression fit | Redundant | Verdict |
+|-------|------|------------|---------------|-----------|---------|
 
-#### Panel flow: A → B → C → ...
-- A→B transition: "..."
-- B→C transition: "..."
+### Cross-Panel Consistency
+- Palette: {PASS/FAIL with hardcoded hex list}
+- Typography: {PASS/FAIL with theme call audit}
+- Axis convention: {PASS/FAIL}
+- Composite feasibility: {within 183mm × 247mm? Y/N}
+- Legend redundancy: {N panels have separate legends → recommend share}
 
-#### Issues
-- <panel X is redundant with Y>
-- <panel Z uses wrong visualization for its claim type>
-- <panel count: N panels (OK / too many)>
+═══════════════════════════════════════════════
+## Verdict
+═══════════════════════════════════════════════
 
-(Repeat for each figure)
+[ ] Ready (proceed to /figure-assemble)
+[ ] Cross-panel fix needed → Loop F (re-trigger panels: {a, c})
+[ ] Layer 0/1 FAIL → Loop S, ESCALATE to user
+```
+
+### Granularity = `panel` Output Template
+`docs_figure/figure_pipeline/review_reports/Fig{N}_{p}_iter{N}.md`:
+
+```markdown
+# Panel Review Report
+Target: Fig{N} panel {p}
+Granularity: panel
+Iteration: {N}
+Date: <DATE>
 
 ═══════════════════════════════════════════════
 ## Layer 2: Content & Logic (P14-P16)
 ═══════════════════════════════════════════════
 
 ### P14 Claim-Match
-| Panel | Claim | Visual pattern | Data match? | Status |
-|-------|-------|---------------|-------------|--------|
+| Item | Status |
+|------|--------|
+| Stated claim | C{x.y}: "..." |
+| Visual pattern | {match/mismatch} |
+| Data verification | {actual: 2.45, expected: 2.33, tolerance: 0.5 → PASS} |
+| Assertion in code | {PASS/FAIL — assert_narrative output} |
+
+### P15 Logic Flow
+- Prior dependency: {met/not} |
 
 ### P16 Restraint
-| Panel | Language check | NS labeled? | Status |
-|-------|--------------|-------------|--------|
+| Check | Status |
+|-------|--------|
+| Causal verbs | {0 found / found: ["demonstrates"]} |
+| NS overclaiming | {0 / found: ["trend"]} |
+| Subtitle limitation noted | {Y/N} |
 
 ═══════════════════════════════════════════════
-## Layer 3: Visual & Structural (P1-P13)
+## Layer 3: Visual & Structural (P8-P13)
 ═══════════════════════════════════════════════
 
-### Summary
-| Figure | P1-P7 | P8-P13 | Issues |
-|--------|-------|--------|--------|
-
-### Specific failures
-(only list actual failures, not PASS items)
+| Principle | Status | Issue |
+|-----------|--------|-------|
+| P8 FOCUS | PASS/FAIL | {focal grey-out missing} |
+| P9 INK | PASS/FAIL | {theme_bw used} |
+| P10 GLANCE | PASS/FAIL/SKIPPED | {requires multi-modal} |
+| P11 ENCODE | PASS/FAIL | {star annotation found} |
+| P12 TYPE | PASS/FAIL | {mixed font sizes} |
+| P13 BREATHE | PASS/FAIL | {28 axis items, no aggregation plan} |
 
 ═══════════════════════════════════════════════
-## Action Items (prioritized)
+## Catalog Cross-Reference
 ═══════════════════════════════════════════════
 
-### STORY-LEVEL (fix first — structure changes)
-1. ...
+- catalog_ref: {path L{X}-{Y}}
+- paper_panel: "Fig 2b"
+- Visual match to paper: {MATCH / DIFFERENT_BUT_INTENTIONAL / MISMATCH}
+- Cross-ref strength: {strong / medium / weak / none}
 
-### CONTENT-LEVEL (fix second — claim/data issues)
-1. ...
+═══════════════════════════════════════════════
+## Multi-Modal Review (if enabled)
+═══════════════════════════════════════════════
 
-### VISUAL-LEVEL (fix last — polish)
-1. ...
+- Label overlap: {none / minor / severe}
+- Visual focal point: {as designed / different / unclear}
+- 5-sec message: {clear / unclear}
+- Color contrast: {OK / issues at <ratio>}
 
+═══════════════════════════════════════════════
 ## Verdict
-[ ] Ready
-[ ] Visual fixes only
-[ ] Content fixes needed
-[ ] Structural redesign required ← Layer 0-1 failures
+═══════════════════════════════════════════════
+
+[ ] Ready (return to /figure-build with status=done)
+[ ] Loop V trigger (visual fix, max 3): {issues_list}
+[ ] Loop C trigger (content fix, max 2): {issues_list}
+[ ] ESCALATE Loop S (story arc / role)
+
+## Action Items
+
+### Loop V (visual fixes — same design, re-implement)
+1. ...
+
+### Loop C (content fixes — partial re-plan)
+1. ...
 ```
 
----
+## Severity Levels
 
-## Severity (updated with Layer 0-1)
+### CRITICAL (Layer 0-1 — structural redesign)
+- Story arc break
+- Premise-conclusion mismatch
+- Panel has no role
+- Visualization mismatches claim type
+→ ESCALATE Loop S to user
 
-### CRITICAL (Layer 0-1 failures — structural redesign)
-- Story arc break: figure transition 불가
-- Premise-conclusion mismatch between figures
-- Panel has no role in argument (unnecessary)
-- Panel shows same info as another (redundant)
-- Visualization type mismatches claim type (wrong expression)
-- Figure-level conclusion doesn't support paper conclusion
-
-### HIGH (Layer 2 failures — content fixes)
+### HIGH (Layer 2 — content fixes)
 - P14 FAIL: claim unsupported by visual or data mismatch
+- P14 FAIL: assertion failure (narrative ↔ data)
 - P15 FAIL: within-figure logic gap
 - P16 FAIL: causal verb or NS overclaiming
+→ Loop C in /panel-build
 
-### MEDIUM (Layer 3 failures — visual fixes)
+### MEDIUM (Layer 3 — visual fixes)
 - P8-P13 individual panel issues
+- Catalog cross-ref MISMATCH
+→ Loop V in /panel-build
 
-### LOW (minor polish)
-- P1-P7 minor structural issues
+### LOW (cross-panel polish)
+- Cross-panel palette hardcode (not BASELINE ref)
+- Legend redundancy (could share)
+- Typography slight mismatch
+→ Loop F in /figure-build
+
+## Bash Helpers
+
+### Quick Layer 3 sweep (panel granularity)
+```bash
+PANEL_R="code/Fig2_c.R"
+
+# P3 (DATA-ONLY) violation
+grep -nE 'geom_tile.*geom_text|gt::|kableExtra' $PANEL_R
+
+# P9 INK
+grep -nE 'theme_bw|theme_grey|panel\.border|panel\.grid\.minor' $PANEL_R
+
+# P11 ENCODE (star)
+grep -nE 'label.*[★✱]|geom_text.*"\\*"|annotate.*"\\*"' $PANEL_R
+
+# P16 RESTRAINT (causal)
+grep -niE 'demonstrates|proves|causes|drives|induces|leads to' $PANEL_R
+
+# C6 hardcoded hex
+grep -nE '"#[0-9A-Fa-f]{6}"' $PANEL_R | grep -v "00_common.R"
+
+# A1 assertions present
+grep -cE 'assert_narrative\(' $PANEL_R
+```
+
+### Cross-panel palette consistency (figure granularity)
+```bash
+# All panels for Fig{N}
+PANELS=$(ls code/Fig{N}_*.R 2>/dev/null)
+
+for f in $PANELS; do
+  echo "=== $f ==="
+  # Hardcoded hex (excluding 00_common references)
+  grep -nE '"#[0-9A-Fa-f]{6}"' "$f" | grep -v 'DX_PRIMARY\|DX_SECONDARY\|FACTOR_FAMILY' | head -5
+done
+```
+
+## Common Pitfalls
+
+| Pitfall | Layer | Fix |
+|---------|-------|-----|
+| Reviewing pixels before story arc | (process) | ALWAYS Layer 0 → 1 → 2 → 3 |
+| Missing data ↔ narrative assertion | L2 P14 | Implement should have `assert_narrative()`; if missing, FAIL |
+| Catalog cross-ref skipped | (process) | If `paper_panel` set, MUST compare |
+| Loop V re-triggered for L2 issue | (verdict mapping) | L2 → Loop C, L3 → Loop V; never confuse |
+| Multi-modal disabled but message unclear | L3 P10 | Re-run with `multimodal=true` if Vision LM available |
+| Overclaiming "improvement" without metric | (review prose) | Use objective scoring, not subjective impressions |
+
+## Notes for Implementers
+
+- Bash grep helpers are FAST — run them first before deeper analysis
+- Multi-modal review uses Read tool on PNG (Claude can read images directly)
+- Catalog cross-ref needs reference paper PDF accessible
+- Output verdict must be machine-parseable for /figure-build / /panel-build to act on
+- Iteration trend: track P1-P16 score (0-2 per principle) across iterations to detect oscillation
