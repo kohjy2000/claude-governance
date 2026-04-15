@@ -1,6 +1,6 @@
 ---
 name: governance-sync
-description: Git pull/push wrapper for claude-governance. Syncs ~/code/claude-governance ↔ GitHub, then re-installs to ~/.claude/. Thin layer — conflict resolution is user's job.
+description: Git pull/push wrapper for claude-governance. Syncs ~/claude-governance ↔ GitHub, then re-installs to ~/.claude/. Thin layer — conflict resolution is user's job.
 allowed-tools: Bash, Read, AskUserQuestion
 ---
 
@@ -20,19 +20,28 @@ allowed-tools: Bash, Read, AskUserQuestion
 | 지점 | 경로 | 역할 |
 |-----|------|------|
 | Remote | `github.com/kohjy2000/claude-governance` | Source of truth (cross-phase constraint #7) |
-| Local working copy | `~/code/claude-governance/` | 편집 지점. 모든 수정은 여기서 시작. |
+| Local working copy | `~/claude-governance/` | 편집 지점. 모든 수정은 여기서 시작. |
 | Install target | `~/.claude/` | Claude가 실제 참조하는 위치. 작업본 sync 결과를 받음. |
 
-**원칙**: 수정은 항상 작업본(`~/code/claude-governance/`)에서. 설치본(`~/.claude/`) 직접 편집 금지. 이 skill은 그 흐름을 강제.
+**원칙**: 수정은 항상 작업본(`~/claude-governance/`)에서. 설치본(`~/.claude/`) 직접 편집 금지. 이 skill은 그 흐름을 강제.
 
 ---
 
 ## Subcommand: status
 
 ```bash
-cd ~/code/claude-governance && git status --short && git log -1 --format='%h %s (%ar)'
-cd ~/code/claude-governance && git fetch --quiet && git status -sb
-diff -rq ~/code/claude-governance ~/.claude/ 2>/dev/null | head -20
+cd ~/claude-governance && git status --short && git log -1 --format='%h %s (%ar)'
+cd ~/claude-governance && git fetch --quiet 2>/dev/null && git status -sb
+# install target 편집 감지 (v1.2: #M5 강화)
+DIFF=$(diff -rq ~/claude-governance/skills     ~/.claude/skills     --exclude='.git' 2>/dev/null; \
+       diff -rq ~/claude-governance/blueprints ~/.claude/blueprints --exclude='.git' 2>/dev/null)
+if [ -n "$DIFF" ]; then
+  echo "⚠ install target 편집 감지:"
+  echo "$DIFF" | head -20
+  echo ""
+  echo "원칙: ~/.claude는 작업본의 mirror. 직접 편집은 다음 pull에서 유실됨."
+  echo "의도한 편집이라면 작업본(~/claude-governance)에도 반영 후 commit 필요."
+fi
 ```
 
 출력 (3블록):
@@ -42,13 +51,13 @@ diff -rq ~/code/claude-governance ~/.claude/ 2>/dev/null | head -20
 HEAD: <short hash> <subject> (<relative time>)
 
 --- Remote sync state ---
-<git status -sb output>  (ahead/behind 표기)
+<git status -sb output>  (ahead/behind 표기, remote 없으면 local-only)
 
---- Working copy vs install target diff ---
-<첫 20줄, 더 있으면 "... N more">
+--- Install target diff ---
+<있으면 경고, 없으면 "clean">
 ```
 
-Clean/ahead/behind/dirty 4가지 케이스를 user에게 명시.
+Clean/ahead/behind/dirty/install-drift 5가지 케이스를 user에게 명시.
 
 ---
 
@@ -56,13 +65,13 @@ Clean/ahead/behind/dirty 4가지 케이스를 user에게 명시.
 
 1. **작업본 상태 체크**:
    ```bash
-   cd ~/code/claude-governance && git status --porcelain
+   cd ~/claude-governance && git status --porcelain
    ```
    출력 비어있지 않으면 STOP. "Uncommitted 변경 있음. stash하거나 commit 후 재시도."
 
 2. **Pull**:
    ```bash
-   cd ~/code/claude-governance && git pull --ff-only origin main
+   cd ~/claude-governance && git pull --ff-only origin main
    ```
    Non-fast-forward → STOP. "Divergent history. 수동 merge 필요."
    Conflict → STOP. "Conflict 발생. 수동 해결 후 `/governance-sync status`로 확인."
@@ -73,10 +82,10 @@ Clean/ahead/behind/dirty 4가지 케이스를 user에게 명시.
    rsync -av --delete \
      --exclude='.git' \
      --exclude='.DS_Store' \
-     ~/code/claude-governance/skills/ ~/.claude/skills/
+     ~/claude-governance/skills/ ~/.claude/skills/
    rsync -av --delete \
      --exclude='.git' \
-     ~/code/claude-governance/blueprints/ ~/.claude/blueprints/
+     ~/claude-governance/blueprints/ ~/.claude/blueprints/
    # CLAUDE.md는 per-machine customize 가능하므로 덮어쓰지 않음. 
    # bootstrap-system이 관리.
    ```
@@ -91,12 +100,12 @@ Clean/ahead/behind/dirty 4가지 케이스를 user에게 명시.
 
 2. **커밋**:
    ```bash
-   cd ~/code/claude-governance && git add -A && git commit -m "<user-provided message>"
+   cd ~/claude-governance && git add -A && git commit -m "<user-provided message>"
    ```
 
 3. **Push**:
    ```bash
-   cd ~/code/claude-governance && git push origin main
+   cd ~/claude-governance && git push origin main
    ```
    Rejected (non-fast-forward) → STOP. "Remote가 앞서 있음. 먼저 `/governance-sync pull`."
 

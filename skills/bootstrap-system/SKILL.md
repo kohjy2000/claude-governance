@@ -11,7 +11,7 @@ allowed-tools: Read, Write, Edit, Bash, Glob, AskUserQuestion
 - `git` 설치 + GitHub SSH 키 설정 완료
 - ~~claude-governance repo가 clone 되어 있어야 함~~ **→ v1.2부터는 Step 2에서 자동 수행**
 
-`$ARGUMENTS`: 사용하지 않음. 작업본 경로는 `~/code/claude-governance`로 고정.
+`$ARGUMENTS`: 사용하지 않음. 작업본 경로는 `~/claude-governance`로 고정.
 
 ---
 
@@ -35,28 +35,57 @@ allowed-tools: Read, Write, Edit, Bash, Glob, AskUserQuestion
 ### 2-1. 사전 체크
 ```bash
 command -v git || { echo "git 필요. 설치 후 재시도."; exit 1; }
-ssh -T git@github.com 2>&1 | head -1
 ```
-SSH 인증 실패 → STOP. "GitHub SSH key 설정 후 재시도."
+
+**SSH 인증 체크** (3가지 fallback):
+```bash
+# Try 1: SSH
+if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+  PROTO="ssh"
+  REMOTE_URL="git@github.com:kohjy2000/claude-governance.git"
+# Try 2: HTTPS (public repo면 anonymous clone 가능)
+elif git ls-remote https://github.com/kohjy2000/claude-governance.git HEAD >/dev/null 2>&1; then
+  PROTO="https"
+  REMOTE_URL="https://github.com/kohjy2000/claude-governance.git"
+# Try 3: local-only (remote 없이 진행)
+else
+  PROTO="local"
+  REMOTE_URL=""
+  echo "⚠ GitHub remote 접근 불가. --local-only 모드로 진행."
+  echo "  향후 SSH 키 등록 후 'git remote add origin ...'로 연결 가능."
+fi
+echo "Protocol: $PROTO"
+```
 
 ### 2-2. 작업본 경로
 ```bash
-REPO_DIR="$HOME/code/claude-governance"
+REPO_DIR="$HOME/claude-governance"
 ```
 고정. 변경 필요 시 이 skill을 수정해야 함 (의도적 — 3개 머신 경로 통일).
 
 ### 2-3. Clone 또는 pull
+
 ```bash
 mkdir -p "$(dirname "$REPO_DIR")"
 if [ -d "$REPO_DIR/.git" ]; then
-  echo "작업본 존재. 최신화 pull."
-  cd "$REPO_DIR" && git pull --ff-only origin main
+  echo "작업본 존재."
+  if [ "$PROTO" != "local" ]; then
+    cd "$REPO_DIR" && git pull --ff-only origin main
+  else
+    echo "local 모드 — pull 생략."
+  fi
+elif [ "$PROTO" != "local" ]; then
+  git clone "$REMOTE_URL" "$REPO_DIR"
 else
-  git clone git@github.com:kohjy2000/claude-governance.git "$REPO_DIR"
+  # local-only: 빈 repo 생성
+  mkdir -p "$REPO_DIR"
+  cd "$REPO_DIR" && git init -b main
+  echo "local repo 생성. 향후 GitHub 연결 시: git remote add origin <URL> && git push -u origin main"
 fi
 ```
 
 Non-fast-forward 또는 clone 실패 시 STOP. 원인 출력 후 수동 해결 요구.
+Local 모드로 진행하면 Phase 0 상태와 유사 — user가 나중에 remote 연결 필요.
 
 ### 2-4. 경로 검증
 ```bash

@@ -1,16 +1,26 @@
 ---
 name: figure-assemble
-description: Phase 4 — Assemble individual panels into final multi-panel figures at journal dimensions (Nature/Cell/Science)
+description: Phase 4 — Assemble individual panels into final multi-panel figures at journal dimensions (Nature/Cell/Science). v1.2 reads PANEL_REGISTRY to auto-select variants.
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion
 ---
 
 # /figure-assemble — Phase 4: Panels → Assembled Figure
 
-$ARGUMENTS: figure 번호 (e.g., "Fig2") 또는 "all", + 선택된 variant 목록 (없으면 자동 선택)
+`$ARGUMENTS`: figure 번호 (예: `Fig2`) 또는 `all`.
 
 ## Role
 Figure compositor. 개별 panel PDF/PNG를 최종 multi-panel figure로 조립.
 Journal spec에 맞춰 크기, 배치, 라벨링 수행.
+
+**v1.2 변경**:
+- Input: `outputs/figures/PANEL_REGISTRY.md` (schema v1.0) 우선 참조.
+- Variant 자동 선택은 `Status: selected` 엔트리 기준.
+
+**Schemas**:
+- `~/.claude/blueprints/schemas/PANEL_REGISTRY.schema.md`
+- `~/.claude/blueprints/schemas/FIGURE_PLAN.schema.md` (layout reference)
+
+---
 
 ## Journal Dimension Specs
 
@@ -22,29 +32,39 @@ Science:            85 mm            114 mm         175 mm          -
 Default (Nature):   89 mm            -              183 mm          170 mm
 ```
 
+---
+
 ## Process
 
-### Step 1: Panel Inventory
+### Step 1: Panel Inventory (v1.2)
+
+**First source**: `outputs/figures/PANEL_REGISTRY.md` — Status=selected 엔트리만 pick.
+
 ```r
-# List available panels for this figure
-panels <- list.files("v10/panels", pattern = "^FigN_.*\\.pdf$")
-# Group by panel letter
+# Parse registry
+registry <- read_delim("outputs/figures/PANEL_REGISTRY.md", 
+                       delim="|", trim_ws=TRUE, skip=header_rows) %>%
+  filter(Status == "selected", str_detect(Panel, paste0("^", fig_id)))
+```
+
+**Fallback** (registry missing 또는 selected 엔트리 없음): 
+- `panels/` 디렉토리의 파일 list 후 user에게 variant 선택 요청.
+- 마지막 폴백: variant=v1 자동 선택.
+
+```r
+panels <- list.files("outputs/figures/panels", pattern = "^FigN_.*\\.pdf$")
 panel_groups <- split(panels, str_extract(panels, "_[A-Z]_"))
 ```
-각 panel에서 사용할 variant 결정:
-- User가 지정했으면 그대로
-- 지정 안 했으면: /figure-review 결과에서 P8-P13 점수 높은 variant 선택
-- 둘 다 없으면: variant 1 (첫 번째)
 
 ### Step 2: Layout Design
 
-**Layout 원칙:**
-1. **Reading order**: 좌→우, 상→하 = panel 순서 (a, b, c...)
-2. **Size = importance**: 주요 결과 panel이 더 넓거나 높음
-3. **Alignment**: 같은 row의 panel은 상단 정렬, 같은 column은 좌측 정렬
-4. **Grouping**: 관련 panel은 인접 배치 (Gestalt proximity)
+**Layout 원칙**:
+1. Reading order: 좌→우, 상→하 = panel 순서 (a, b, c...).
+2. Size = importance: 주요 결과 panel이 더 넓거나 높음.
+3. Alignment: 같은 row 상단 정렬, 같은 column 좌측 정렬.
+4. Grouping: 관련 panel 인접 배치.
 
-**Common layouts:**
+**Common layouts**:
 ```
 # 2-row symmetric (5 panels)
 layout <- "
@@ -66,38 +86,38 @@ EE##
 "
 ```
 
+FIGURE_PLAN.md의 Paper-Level Story Arc를 참조해 figure role에 맞는 layout 선택.
+
 ### Step 3: Assemble with patchwork
 
 ```r
 library(patchwork)
 
-# Load panels (each is a ggplot object or grob)
-pA <- readRDS("panels/FigN_A_selected.rds")  # if saved as RDS
+# Load panels
+pA <- readRDS("outputs/figures/panels/Fig1_A_v2-forest.rds")  # if saved as RDS
 # OR re-source the figure script and capture plot objects
 
-# Compose
 assembled <- pA + pB + pC + pD + pE +
   plot_layout(design = layout) +
   plot_annotation(
-    tag_levels = "a",                    # lowercase (Nature spec)
+    tag_levels = "a",
     theme = theme(
       plot.tag = element_text(
-        size = 8, face = "bold",         # P12: 8pt bold
+        size = 8, face = "bold",
         family = "Helvetica"
       )
     )
   )
 
-# Export at exact journal dimensions
 ggsave(
-  "assembled/FigN_assembled.pdf",
+  "outputs/figures/assembled/Fig1_assembled.pdf",
   assembled,
-  width = 183, height = 170,             # Nature full-width
+  width = 183, height = 170,
   units = "mm",
   device = cairo_pdf
 )
 ggsave(
-  "assembled/FigN_assembled.png",
+  "outputs/figures/assembled/Fig1_assembled.png",
   assembled,
   width = 183, height = 170,
   units = "mm",
@@ -107,65 +127,59 @@ ggsave(
 
 ### Step 4: Non-ggplot Panel Integration
 
-ComplexHeatmap, tableGrob 등 non-ggplot 객체가 있을 때:
 ```r
-# ComplexHeatmap → grob 변환
+# ComplexHeatmap → grob
 ht_grob <- grid::grid.grabExpr(draw(ht_object))
 pD_wrapped <- patchwork::wrap_elements(ht_grob)
 
-# gt table → grob 변환 (gt >= 0.10)
+# gt table → grob (gt >= 0.10)
 tbl_grob <- gt::as_gtable(gt_table)
 pE_wrapped <- patchwork::wrap_elements(tbl_grob)
 
-# 이후 patchwork 합성에 동일하게 사용
 assembled <- pA + pB + pC + pD_wrapped + pE_wrapped +
   plot_layout(design = layout)
 ```
 
 ### Step 5: Quality Checks
 
-조립 후 반드시 확인:
+조립 후:
 
 ```
 [ ] Panel labels (a-e) 모두 visible, 8pt bold lowercase
 [ ] 겹치는 text 없음
 [ ] Panel 간 여백 균일 (최소 2mm at print size)
 [ ] 총 dimensions이 journal spec 이내
-[ ] 가장 작은 text가 5pt 이상 (print size 기준)
-[ ] 주요 panel이 가장 큰 면적 차지
-[ ] Color 일관성 (같은 group = 같은 color across all panels)
+[ ] 가장 작은 text가 5pt 이상
+[ ] 주요 panel이 가장 큰 면적
+[ ] Color 일관성 (같은 group = 같은 color across panels)
 ```
 
-**Print-size test:**
-```r
-# PDF를 실제 크기로 열어서 확인
-# 183mm = 7.2in → 모니터에서 7.2인치로 표시될 때 text 읽히는지
-```
+**Print-size test**: PDF를 실제 크기로 열어 text 가독성 확인 (183mm = 7.2in).
+
+---
 
 ## Assembly Script Template
 
 ```r
-# assemble_FigN.R
-source("00_common_v10.R")
+# assemble_Fig1.R
+source("outputs/figures/code/00_common.R")
+source("outputs/figures/code/Fig1_<topic>.R")  # creates plot_fig1_X functions
 
-# --- Re-create selected panels ---
-# (각 Fig script에서 plot 객체를 반환하도록 함수화 되어 있어야 함)
-source("FigN_v10_topic.R")  # creates pA, pB, pC, pD, pE
+# --- PANEL_REGISTRY에서 selected variant 읽기 ---
+# (pseudo — 실제 구현은 registry parsing helper 필요)
+variants <- read_registry_selected("Fig1")  # returns list(A="v2-forest", B="v1-violin", ...)
 
-# --- Select variants ---
-pA <- plot_figN_A("selected_variant")
-pB <- plot_figN_B("selected_variant")
-pC <- plot_figN_C("selected_variant")
-pD <- plot_figN_D("selected_variant")
-pE <- plot_figN_E("selected_variant")
+pA <- plot_fig1_A(variants$A)
+pB <- plot_fig1_B(variants$B)
+pC <- plot_fig1_C(variants$C)
+pD <- plot_fig1_D(variants$D)
+pE <- plot_fig1_E(variants$E)
 
-# --- Layout ---
 layout <- "
 AABBB
 CCDDE
 "
 
-# --- Assemble ---
 fig <- pA + pB + pC + pD + pE +
   plot_layout(design = layout) +
   plot_annotation(
@@ -174,52 +188,65 @@ fig <- pA + pB + pC + pD + pE +
       plot.tag = element_text(size = 8, face = "bold", family = "Helvetica")
     )
   ) &
-  theme(plot.margin = margin(2, 2, 2, 2))  # P13: breathing room
+  theme(plot.margin = margin(2, 2, 2, 2))
 
-# --- Export ---
 ggsave(
-  file.path(FIGDIR, "assembled", "FigN_assembled.pdf"),
+  "outputs/figures/assembled/Fig1_assembled.pdf",
   fig, width = 183, height = 150, units = "mm", device = cairo_pdf
 )
 ggsave(
-  file.path(FIGDIR, "assembled", "FigN_assembled.png"),
+  "outputs/figures/assembled/Fig1_assembled.png",
   fig, width = 183, height = 150, units = "mm", dpi = 300
 )
 
-cat("FigN assembled: 183 x 150 mm\n")
+cat("Fig1 assembled: 183 x 150 mm\n")
 ```
+
+---
 
 ## Supplementary Figure Assembly
 
-Supplementary는 제약이 더 유연:
-- Width: 183mm (full-width 권장)
-- Height: 247mm까지 가능 (Nature max)
-- Panel 수 제한 없음
-- 하지만 P13 (BREATHE) 여전히 적용 — 읽을 수 있어야 함
+- Width: 183mm (full-width 권장).
+- Height: 247mm까지 가능 (Nature max).
+- Panel 수 제한 없음.
+- P13 (BREATHE) 여전히 적용.
 
 ```r
-# Supp figures: taller allowed
 ggsave(..., width = 183, height = 240, units = "mm")
 ```
+
+---
 
 ## Output
 
 ```
-<FIGDIR>/assembled/
+outputs/figures/assembled/
 ├── Fig1_assembled.pdf     # 183 x Nmm, Nature full-width
 ├── Fig1_assembled.png     # 300 dpi
 ├── Fig2_assembled.pdf
-├── ...
 └── SuppS_H2S_assembled.pdf
 ```
 
+---
+
 ## Common Pitfalls
+
 | Pitfall | Fix |
 |---------|-----|
 | Text too small after assembly | 처음부터 target dimensions에서 디자인 (base_size=7) |
 | Nested patchwork crash | wrap_elements() for non-ggplot objects |
 | Panel labels missing | plot_annotation(tag_levels="a") 확인 |
 | Uneven spacing | `& theme(plot.margin=margin(2,2,2,2))` 추가 |
-| Panel aspect ratio distorted | individual panel에서 coord_fixed() 또는 aspect.ratio 설정 |
+| Aspect ratio distorted | individual panel에서 coord_fixed() 또는 aspect.ratio |
 | PDF font not embedded | cairo_pdf device 사용 |
 | Color shift in print | RGB → CMYK 변환 확인 (Nature는 auto) |
+| **Registry와 panels/ mismatch (v1.2)** | Registry의 Status=selected 파일이 실제 존재하는지 확인. 없으면 figure-implement 재실행 필요. |
+
+---
+
+## v1.2 요약
+
+- Input: PANEL_REGISTRY.md 우선.
+- Fallback: 디렉토리 스캔 + user 확인.
+- 경로: 모든 output이 `outputs/figures/assembled/` 하위.
+- Status=selected 아닌 variant는 assembled figure에 포함하지 않음.

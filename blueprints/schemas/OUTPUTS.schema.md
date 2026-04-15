@@ -6,6 +6,15 @@
 
 ---
 
+## Machine-readable enum lines
+
+```
+enum.OutputType   : figures | writing | grant
+enum.PanelStatus  : draft | selected | superseded | rejected   (see PANEL_REGISTRY.schema)
+```
+
+---
+
 ## 원칙
 
 1. **`outputs/`는 derivative**. Analysis 결과를 publication artifact로 변환하는 공간. Analysis 자체는 Layer 1 (`docs/`, `scripts/`, `data/`)에서.

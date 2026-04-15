@@ -1,8 +1,22 @@
-# REVIEW_LOG.md Schema v1.0 (figures)
+# REVIEW_LOG.md Schema v1.0 (shared: figures + grant)
 
-> **Primary consumer**: `figure-review` subagent (writes narrative entries), Phase 6 hook (writes FAIL escalation entries).
-> **Location**: `<project>/outputs/figures/REVIEW_LOG.md`.
-> **Purpose**: Paper audit trail. Paper 제출 시 reviewer에게 제공 가능한 수준의 review 이력. Append-only.
+> **Primary consumer**: `figure-review` subagent (figures), future `grant-review` (grant). Phase 6 hook writes FAIL escalation entries.
+> **Locations**:
+> - `<project>/outputs/figures/REVIEW_LOG.md` — figure review trail
+> - `<project>/outputs/grant/REVIEW_LOG.md` — grant review trail
+> **Purpose**: Audit trail. Paper 제출 시 reviewer에게 제공 가능한 수준. Append-only.
+> **이 schema는 figures/grant 공용**. Entry type으로 domain 구분.
+
+---
+
+## Machine-readable enum lines
+
+```
+enum.EntryType    : subagent-review | hook-fail | note | grant-review
+enum.Layer        : L0 | L1 | L2 | L3
+enum.Severity     : FAIL | WARN | INFO | OK
+enum.Domain       : figures | grant
+```
 
 ---
 
