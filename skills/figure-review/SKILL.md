@@ -1,370 +1,254 @@
 ---
 name: figure-review
-description: Phase 3 — Top-down figure review: Story Arc → Figure Role → Panel Content → Visual/Structural checks
-allowed-tools: Read, Bash, Glob, Grep
+description: Phase 3 — Top-down figure review. Layer 0 (Story Arc with CLAIMS) → Layer 1 (Figure Role) → Layer 2 (Content/Logic) → Layer 3 (Visual/Structural). Layer 0-1 FAIL = Layer 2-3 meaningless. Writes narrative audit trail to REVIEW_LOG.md.
+allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion
 ---
 
-# /figure-review — Phase 3: Top-Down Figure Review
+# /figure-review — Phase 3: Top-down figure review
 
-$ARGUMENTS: figure 디렉토리 경로 또는 특정 figure 번호
+`$ARGUMENTS`:
+- Figure scope (예: `Fig1-Fig5`, `Fig3 only`). 생략 시 전체.
+- `--hook-log-only` — hook.log만 aggregate 훑고 REVIEW_LOG 갱신. Layer 전체 review 안 함.
+- `--auto` — figure-implement 종료 시 자동 invoke됨을 표시. Step 0 요구사항 완화 (missing 파일 시 STOP 대신 WARN + 부분 review).
+
+예: `/figure-review Fig1-Fig5`
+
+## Invocation
+1. **Manual**: user가 명시적으로 `/figure-review` 호출 (figure work 중간 점검).
+2. **Auto (from figure-implement)**: `figure-implement` 스킬이 panel 생성 완료 직후 `/figure-review --auto` 자동 호출. 기본 동작.
+   - Phase 1-5: `figure-implement` 스킬 마지막 step에 "이 스킬 끝나면 `/figure-review --auto` 호출하라"는 지시를 박음. 기술적으로 LLM의 tool-chain으로 구현.
+   - Phase 6 이후: PostToolUse hook이 `figure-implement` 완료 감지 → subagent로 `/figure-review` 자동 dispatch.
+3. **Hook-driven FAIL escalation**: Phase 6 이후 hook이 Layer 3 FAIL 감지 시 즉시 subagent invoke (`--hook-log-only`).
+
+> **Phase 2 TODO**: `figure-implement/SKILL.md`에 "Step N (last): 완료 후 `/figure-review --auto` 호출" 라인을 추가해야 함. 이 Turn 2에서는 figure-review 쪽만 스펙 고정. figure-implement 파일 수정은 Phase 2 범위.
 
 ## Role
-Scientific figure reviewer. **Story에서 시작하여 pixel로 내려가는** top-down 방식.
-Panel 체크리스트가 아니라, "이 figure set이 논문의 argument를 빌드업하는가"를 먼저 묻는다.
-
-## Review Layers (반드시 이 순서로 실행)
-
-```
-Layer 0: Story Arc Review        ← 가장 먼저. Paper 전체 narrative chain.
-Layer 1: Figure Role Review      ← Figure별 역할, 패널 필요성, 표현 적절성.
-Layer 2: Content & Logic (P14-P16) ← Panel별 claim-visual match, restraint.
-Layer 3: Visual & Structural (P1-P13) ← Panel별 체크리스트 (automated + visual).
-```
-
-**Layer 0-1이 FAIL이면 Layer 2-3 결과는 무의미.** 구조가 틀리면 pixel을 고쳐봐야 소용없다.
+Independent reviewer. Story → Figure → Panel 순의 top-down. 각 layer가 자체 pass criterion 가짐.
+"Layer 0-1이 FAIL이면 Layer 2-3는 의미 없다" — 상위 layer 실패 시 즉시 escalate, 하위 layer는 skip.
 
 ---
 
-## Layer 0: Story Arc Review (Paper-Level)
+## Step 0: Load context + hook.log
 
-### 0-1. Narrative Chain 추출
-Design doc에서 paper-level story arc를 읽고, 각 figure의 **1-sentence message**를 추출한다.
+### 0-1. `outputs/figures/FIGURE_PLAN.md`
+- 없으면 STOP. "`/figure-plan` 먼저 돌려라."
+- 상단 `<!-- figure-plan-step0` 블록 parse → mode (exploratory/manuscript), claims count per tag, CLAIMS source 획득.
+- Exploratory draft (`claims_source: narrative-draft`)인 FIGURE_PLAN은 review 대상이 아님. "Manuscript mode로 재생성 후 review하라"고 지시 후 STOP.
+
+### 0-2. `docs/CLAIMS.md`
+- FIGURE_PLAN에 참조된 `C{N}` ID가 모두 resolve되는지 확인.
+- Tag 재확인 — FIGURE_PLAN의 panel 배치와 CLAIMS의 현재 Tag가 mismatch면 Layer 1 FAIL 후보.
+- `Last recomputed` 체크: `main` tag claim이 90일 초과 → Layer 1 WARN (stale anchor 위험).
+- `deprecated` tag claim이 FIGURE_PLAN에 남아있으면 즉시 Layer 0 FAIL.
+
+### 0-3. `docs/STORY.md`
+- `Hypothesis Evolution` current framing + `Pivots` 읽음.
+- Story arc가 FIGURE_PLAN의 paper-level message와 consistent한지 Layer 0에서 검증.
+
+### 0-4. `outputs/figures/hook.log` (존재 시)
+- **직전 subagent 실행 timestamp 이후**의 엔트리만 훑는다. 첫 실행이면 전체.
+- 반복 발생 패턴 식별 (같은 panel, 같은 rule violation 3회 이상) → Layer 3 aggregate 엔트리 후보.
+- FAIL-level 엔트리가 REVIEW_LOG에 이미 escalate 됐는지 교차 확인 — 안 됐으면 이번 review에서 승격.
+
+### 0-5. `outputs/figures/REVIEW_LOG.md` (존재 시)
+- 최신 N개 엔트리 읽어 "이번 review가 이전 review의 action item을 resolve하는지" 추적.
+- Append-only 원칙 준수 — 이전 엔트리 수정 절대 금지. 취소/번복은 새 엔트리에서 이전 timestamp 참조.
+
+### Step 0 output (화면)
 
 ```
-Fig1: "[message]"
-Fig2: "[message]"
-Fig3: "[message]"
-...
+Mode: <from figure-plan-step0>
+CLAIMS state: N main / M supp / K discussion / D deprecated  (stale_main: X)
+Hook log since last review: L entries (F FAIL / W WARN / I INFO)
+Previous REVIEW_LOG: T entries, last at <timestamp>
 ```
 
-### 0-2. Argument Chain Test
-각 figure 사이에 **transition sentence**를 쓸 수 있는가?
-
+Machine-readable marker (REVIEW_LOG의 이번 엔트리 헤더에 삽입):
+```html
+<!-- figure-review-run
+timestamp: <ISO8601>
+mode_inherited: <from figure-plan>
+hook_log_range: <from_ts>..<to_ts>
+review_scope: <$ARGUMENTS>
+-->
 ```
-Fig1 → Fig2: "Fig1 conclusion이 Fig2의 전제가 되는가?"
-  sentence: "[Fig1 showed X] → [so naturally we ask Y] → [Fig2 answers Y]"
-Fig2 → Fig3: ...
-Fig3 → Fig4: ...
-Fig4 → Fig5: ...
-```
-
-- PASS: 한 문장으로 자연스럽게 연결. 독자가 "다음에 뭘 보여줄지" 예측 가능.
-- FAIL: transition을 쓸 수 없거나, 독자가 "왜 갑자기 이걸?" 이라고 물을 수밖에 없음.
-- WARN: 연결은 되지만 비약이 있어서 bridging 설명이 필요.
-
-### 0-3. Premise-Conclusion Chain
-각 figure의 결론(conclusion)과 다음 figure의 전제(premise)를 명시적으로 나열한다.
-
-| Figure | Conclusion (독자가 이 figure 후 알게 되는 것) | Next Figure's Premise (다음 figure가 전제하는 것) | Match? |
-|--------|---------------------------------------------|--------------------------------------------------|--------|
-
-- Match = PASS: conclusion이 premise를 충분히 커버
-- Partial = WARN: conclusion이 premise의 일부만 커버 (독자가 gap을 채워야 함)
-- Mismatch = FAIL: conclusion이 premise와 무관하거나 모순
-
-### 0-4. Paper-Level Argument 1문장 요약
-전체 figure set을 본 후, 독자가 도달해야 할 최종 결론을 1문장으로:
-- "이 논문의 그림만 보고 도달할 수 있는 결론은: ____________"
-- Design doc의 intended conclusion과 비교.
-- Gap이 있으면 어느 figure에서 빠졌는지 식별.
-
-### 0-5. 불필요한 Figure 검출
-각 figure에 대해:
-- "이 figure가 없으면 argument가 성립하는가?"
-- YES → figure 삭제 또는 Supp 이동 고려
-- NO → 필수 figure
 
 ---
 
-## Layer 1: Figure Role Review (Figure-Level)
+## Layer 0: Story Arc (MOST CRITICAL)
 
-### 1-1. Figure 역할 정의
-각 figure가 argument에서 수행하는 역할을 명시:
+**Question**: Paper 전체 서사가 FIGURE_PLAN의 figure 순서로 성립하는가? CLAIMS.md의 `main` tag claim들이 figure에 실제로 등장하는가?
 
-| Role | 설명 | 예시 |
-|------|------|------|
-| LANDSCAPE | 전체 데이터를 보여줌 (funnel 시작) | Fig2: 102,758 tests |
-| ZOOM | landscape에서 subset을 확대 | Fig2-E: M4 × SBS |
-| MECHANISM | HOW/WHY를 설명 | Fig3: CDT→DSB→LOH |
-| VALIDATION | 독립 데이터에서 재현 | Fig4: prediction + external |
-| SYNTHESIS | 여러 결과를 통합 정리 | Fig5: cross-cohort |
+### Checks
 
-### 1-2. Panel 필요성 심사 (Figure 내부)
-각 panel에 4가지 질문:
+| Check | Manuscript mode | Exploratory mode |
+|-------|-----------------|------------------|
+| 모든 `main` tag claim이 FIGURE_PLAN에 1회 이상 등장 | FAIL if 부재 | WARN if 부재 |
+| `deprecated` tag claim이 FIGURE_PLAN에 참조됨 | FAIL | FAIL |
+| Fig 순서의 message가 STORY current framing과 정렬 | FAIL if 역행 | WARN if 역행 |
+| Paper story arc가 3줄로 요약 가능 (Fig1→FigN) | FAIL if 불가 | Skip |
 
-1. **왜 여기 있는가?** — 이 panel이 figure의 argument에서 맡은 역할
-   - 답 불가 → 삭제 후보
-2. **없으면 argument가 약해지는가?** — 필수성
-   - NO → Supp 이동 후보
-3. **앞 panel의 결론에서 자연스럽게 이어지는가?** — 논리적 위치
-   - NO → 순서 재배치 또는 bridging 추가
-4. **다른 panel과 중복되는가?** — 유일성
-   - YES → merge 또는 한쪽 삭제
-
-### 1-3. 표현 적절성 심사
-각 panel에 대해: "이 claim을 전달하기에 **이 시각화가 최적인가?**"
-
-| Claim 유형 | 좋은 표현 | 나쁜 표현 | 왜? |
-|------------|----------|----------|-----|
-| 극적 감소 (5490→52) | slopegraph, waterfall | bar chart | 시각적 "절벽"이 필요 |
-| 확산/집중 | Lorenz curve, Gini | manhattan | 불균등 분포가 곡선으로 보임 |
-| 효과 크기 + 불확실성 | forest + CI | dot chart without CI | CI 없으면 확실성 판단 불가 |
-| count 비교 (4 vs 0) | bar chart, annotation | 28-row forest | count는 bar가 직관적 |
-| 방향 전환 (sig→NS) | filled/hollow, mirror bar | table | 시각적 대비 필요 |
-| 전체 landscape | heatmap, category bar | 개별 나열 | 패턴 인식이 목적 |
-| null result (all NS) | p-histogram, compact summary | 48-row heatmap | "없다"를 보여주는 데 48행 불필요 |
-| replication status | concordance dot plot | tile+text table | shape/color encoding > text |
-
-**Red flags:**
-- 시각화 선택이 claim 유형과 불일치 → "표현이 메시지를 방해한다"
-- 같은 정보를 다른 패널에서 이미 보여줌 → 중복
-- N_items >> 20 인데 message는 "몇 개만 sig" → Top-K로 축소
-
-### 1-4. Figure 내부 Logic Flow
-Figure 내 panel 순서의 argument chain:
-
-```
-For each figure:
-  Panel A conclusion: "..."
-  → Panel B premise: "..." (match? YES/NO/PARTIAL)
-  Panel B conclusion: "..."
-  → Panel C premise: "..." (match? YES/NO/PARTIAL)
-  ...
-```
-
-Transition sentence를 각 panel 사이에 작성:
-- 쓸 수 있으면 PASS
-- 억지스러우면 WARN
-- 불가능하면 FAIL
-
-### 1-5. Panel Count 적정성
-- Nature: main figure당 3-7 panels가 적정. 8+ = 과밀
-- 각 figure panel 수 확인. 과밀 시 merge/split/supp 이동 제안.
+Layer 0 FAIL → 즉시 REVIEW_LOG에 `[L0-FAIL]` prefix로 기록, Layer 1-3 skip. Action: "Story 재설계 또는 CLAIMS Tag 재검토."
 
 ---
 
-## Layer 2: Content & Logic Checks (P14-P16, Panel-Level)
+## Layer 1: Figure Role
 
-### Check 14: Claim-Match (P14)
-**Visual + data inspection. Most critical panel-level check.**
-For each panel:
-1. Identify the panel's stated claim (from title/subtitle or design doc)
-2. Ask: "독자가 이 그림만 보고 이 claim에 도달할 수 있는가?"
-3. Check: 시각적 패턴 (slope, separation, overlap)이 claim을 직접 보여주는가?
-4. **Data verification**: claim의 수치가 실제 데이터/렌더링과 일치하는가?
+**Question**: 각 figure가 고유 역할을 가지는가? Panel 필수성이 확보되는가? Claim-figure 매핑이 CLAIMS와 일치하는가?
 
-- PASS: 시각적 패턴이 claim을 직관적으로 증명 + 수치 일치
-- FAIL-VISUAL: claim은 맞지만 그림에서 안 보임 → 시각화 재설계
-- FAIL-DATA: claim 수치가 데이터와 불일치 → claim 수정 필요
-- FAIL-ABSENT: claim이 아예 없음 (title만 있고 what-to-see 불명확)
+### Per-figure checks
+1. **Role statement**: "이 figure가 paper에서 담당하는 논증 역할"을 한 문장으로 쓸 수 있는가.
+2. **Panel necessity**: 각 panel 제거 시 figure message가 약해지는가. 제거해도 무방한 panel 존재 시 WARN.
+3. **Claim-panel 매핑 일치**: FIGURE_PLAN의 `Claim ID` 필드가 CLAIMS의 현재 Tag와 정합 (예: `supp` tag claim이 main figure focal로 배치 → FAIL).
+4. **Expression fit**: 선택된 chart type이 데이터 패턴에 적합한가 (figure-plan Technique Matching Reference 재검증).
 
-**Red flag questions:**
-- "이 패널의 시각적 패턴이 claim의 반대로도 해석될 수 있는가?" → ambiguity
-- "claim에 사용된 수치(3/3, 99.1%, 6×)가 렌더링된 그림에서 확인 가능한가?"
-
-### Check 15: Logic Flow (P15)
-(Layer 1-4에서 이미 수행. 여기서는 결과를 기록.)
-
-### Check 16: Restraint (P16)
-**Title/subtitle/annotation text inspection.**
-```bash
-# Code check: causal verbs (forbidden per AGENTS.md)
-grep -niE 'demonstrates|proves|causes|drives|induces|leads to' Fig*.R Supp*.R
-# 매치 = FAIL
-
-# Code check: overclaiming NS results
-grep -niE 'trend|suggestive|borderline|approaching' Fig*.R Supp*.R
-# 매치 = WARN (acceptable only if explicit p-value accompanies)
-```
-
-- PASS: "association", "correlated", "observed" only
-- PASS: NS 결과는 "NS (p=0.xx)" 명시
-- FAIL: causal verb 사용
-- FAIL: NS를 "trend"으로 표현하면서 p-value 미기재
-- WARN: "suggestive (p=0.096)" — p-value 동반이므로 acceptable but flag
-
-**Subtitle limitation check:**
-- 모든 NS 패널: subtitle에 "NS" 명시 필수
-- Observational 연구: 최소 1곳에 "observational" 또는 "association" 명시
-- External validation 실패: "not replicated" 또는 "NS in [cohort]" 명시
+Layer 1 FAIL → `[L1-FAIL]` prefix로 REVIEW_LOG. Action item 포함. Layer 2-3 skip for that figure.
 
 ---
 
-## Layer 3: Visual & Structural Checks (P1-P13, Panel-Level)
+## Layer 2: Content/Logic (P14-P16, panel-level)
 
-### Structural (P1-P7) — mostly automated
+Subagent가 수행하는 판단성 review. Hook으로 자동화 불가.
 
-#### P1 Funnel
-- 각 panel subtitle에서 scope 추출 → 단조감소 확인
+| Rule | Check |
+|------|-------|
+| P14 CLAIM-MATCH | 시각 패턴이 claim statement를 실제로 지지하는가 (단순히 C{N} ID만 적혀있는 게 아니라). |
+| P15 LOGIC-FLOW | 이전 panel 결론이 이 panel 전제인가. Transition sentence가 실질적 logic bridge인가. |
+| P16 RESTRAINT | Subtitle의 Limitation이 CLAIMS verbatim인가. Overclaim 표현이 슬쩍 들어갔는가. |
 
-#### P2 Evidence Before Conclusion
-- dependency DAG = panel order
-
-#### P3 Data-Only
-- 화살표 다이어그램, 개념도, subjective grade 금지
-- table-as-figure (geom_tile+geom_text) = P3 FAIL
-
-#### P4 Exhaustive Before Selective
-- Subset panel은 선행 universe panel 필요
-
-#### P5 Multi-Variant
-```bash
-for panel in A B C D E F G H I; do
-  n=$(ls panels/Fig*_${panel}_*.png 2>/dev/null | wc -l)
-  echo "Panel $panel: $n variants $([ $n -ge 2 ] && echo OK || echo FAIL)"
-done
-```
-
-#### P6 SSOT Provenance
-```bash
-grep -n 'read_tsv\|read_csv\|fread' Fig*.R | grep -v 'SSOT\$'
-```
-
-#### P7 Cross-Figure Consistency
-- Hex literals outside 00_common = FAIL
-
-### Visual Storytelling (P8-P13) — visual + code
-
-#### P8 Focal Point
-- [ ] focal element 있는가? (saturated color / larger size)
-- [ ] context = grey/transparent?
-- FAIL: 전체 동일 색상/크기
-
-#### P9 Data-Ink
-```bash
-grep -nE 'theme_bw|theme_grey|theme_classic|panel\.border.*element_rect|panel\.grid\.minor' Fig*.R Supp*.R
-```
-
-#### P10 Glance Test
-- 5초 만에 캡션 없이 메시지 도달 가능한가?
-
-#### P11 Visual Encoding
-```bash
-grep -nE "label.*[★✱\\*]|geom_text.*star|annotate.*\\*" Fig*.R Supp*.R
-```
-
-#### P12 Typography
-- 5-7pt body, 8pt bold lowercase labels
-
-#### P13 Breathing Room
-- axis items ≤ 20, no overlap
+Layer 2 FAIL → `[L2-FAIL]` prefix로 기록. 해당 panel만 해당, 다른 panel Layer 3은 계속 진행.
 
 ---
 
-## Output: Review Report
+## Layer 3: Visual/Structural (P1-P13, panel-level) [hook-owned in Phase 6]
 
-리뷰는 Layer 순서대로 출력한다. Layer 0-1이 가장 중요.
+**현재 (Phase 1-5)**: subagent가 mechanical하게 체크. 주로 grep-level.
+**Phase 6 이후**: PostToolUse hook이 매 figure-implement 실행 후 자동 수행. 이 SKILL.md의 Layer 3 섹션은 hook 코드로 이전되고 subagent는 hook.log aggregate만 수행.
+
+### Mechanical checks (currently here, moving to hook in Phase 6)
+
+| Rule | Grep target |
+|------|-------------|
+| P1 FUNNEL | FIGURE_PLAN panel 순서의 scope monotone 확인 |
+| P2 EVIDENCE | Dependency DAG vs reading order |
+| P3 DATA-ONLY | Panel 기술에 schematic/diagram keyword 없는지 |
+| P5 VARIANTS | 각 panel에 variant ≥2 명시됐는지 |
+| P6 SSOT | 모든 path가 DATA_MAP 참조인지 (hardcoded path FAIL) |
+| P9 INK | gridlines/borders/shadows 명시 여부 |
+| P12 TYPE | font size hierarchy 명시 |
+| P13 BREATHE | 축 항목 수 |
+
+Layer 3 WARN은 hook.log에만, FAIL은 REVIEW_LOG에 escalation.
+
+---
+
+## Output protocol: log dual-write
+
+### REVIEW_LOG.md (narrative, paper audit trail)
+
+Append-only. 이번 review의 단일 엔트리는 다음 구조:
 
 ```markdown
-# Figure Review Report
-Date: <DATE>
+## Review {{ISO8601}}
 
-═══════════════════════════════════════════════
-## Layer 0: Story Arc
-═══════════════════════════════════════════════
-
-### Paper Story Arc
-Fig1: "[message]"
-Fig2: "[message]"
-...
-
-### Cross-Figure Argument Chain
-| Transition | Sentence | Status |
-|------------|----------|--------|
-| Fig1→Fig2  | "[conclusion] → [question] → [answer]" | PASS/FAIL |
-| Fig2→Fig3  | ... | ... |
-
-### Premise-Conclusion Match
-| Figure | Conclusion | Next Premise | Match? |
-|--------|------------|-------------|--------|
-
-### Paper-Level Conclusion
-- Intended: "..."
-- Achievable from figures alone: "..."
-- Gap: <where the argument breaks>
-
-═══════════════════════════════════════════════
-## Layer 1: Figure Roles & Panel Necessity
-═══════════════════════════════════════════════
-
-### FigX: [Role] — "[1-sentence message]"
-
-| Panel | Role in argument | Necessary? | Expression fit? | Redundant? | Verdict |
-|-------|-----------------|------------|-----------------|------------|---------|
-
-#### Panel flow: A → B → C → ...
-- A→B transition: "..."
-- B→C transition: "..."
-
-#### Issues
-- <panel X is redundant with Y>
-- <panel Z uses wrong visualization for its claim type>
-- <panel count: N panels (OK / too many)>
-
-(Repeat for each figure)
-
-═══════════════════════════════════════════════
-## Layer 2: Content & Logic (P14-P16)
-═══════════════════════════════════════════════
-
-### P14 Claim-Match
-| Panel | Claim | Visual pattern | Data match? | Status |
-|-------|-------|---------------|-------------|--------|
-
-### P16 Restraint
-| Panel | Language check | NS labeled? | Status |
-|-------|--------------|-------------|--------|
-
-═══════════════════════════════════════════════
-## Layer 3: Visual & Structural (P1-P13)
-═══════════════════════════════════════════════
+<!-- figure-review-run
+timestamp: ...
+mode_inherited: ...
+hook_log_range: ...
+review_scope: ...
+-->
 
 ### Summary
-| Figure | P1-P7 | P8-P13 | Issues |
-|--------|-------|--------|--------|
+- Mode: <...>
+- Overall: <PASS | L0-FAIL | L1-FAIL | L2-FAIL | L3-issues-only>
+- Claims audited: <list of C{N}>
+- Hook.log aggregate: <N FAIL escalated, M recurring patterns promoted>
 
-### Specific failures
-(only list actual failures, not PASS items)
+### Findings
+- [L0-FAIL] ... (if any)
+- [L1-FAIL] ... (if any)
+- [L2-FAIL] ... (if any)
+- [L3-FAIL-from-hook] ... (escalated from hook.log)
+- [OK] <brief per-layer pass note>
 
-═══════════════════════════════════════════════
-## Action Items (prioritized)
-═══════════════════════════════════════════════
+### Action items
+- [ ] <sorted by severity, each with owner & target date>
 
-### STORY-LEVEL (fix first — structure changes)
-1. ...
+### Reference
+- Previous review: <timestamp of prior REVIEW_LOG entry>
+- hook.log range covered: <from>..<to>
+```
 
-### CONTENT-LEVEL (fix second — claim/data issues)
-1. ...
+### hook.log (mechanical, dev artifact)
 
-### VISUAL-LEVEL (fix last — polish)
-1. ...
+Hook이 PostToolUse에서 직접 append. 각 줄 format:
+```
+{{ISO8601}} | {{level}} | {{rule}} | {{panel}} | {{message}}
+```
+- level ∈ {FAIL, WARN, INFO}
+- rule ∈ P1..P16
+- panel 예: Fig1A, Fig3B
 
-## Verdict
-[ ] Ready
-[ ] Visual fixes only
-[ ] Content fixes needed
-[ ] Structural redesign required ← Layer 0-1 failures
+Hook FAIL 감지 시 **추가로** REVIEW_LOG에 즉시 `[hook-fail]` prefix append:
+```markdown
+## Hook FAIL {{ISO8601}}
+- Rule: P6 SSOT
+- Panel: Fig3B
+- Detail: hardcoded path `/data/x.csv` outside DATA_MAP
+- Auto-logged from hook.log
+- Subagent review pending
+```
+
+이 escalation 엔트리는 다음 subagent review에서 action 정해진 후 정식 findings 블록으로 이어서 기록. 삭제 금지.
+
+---
+
+## Supersede pattern (append-only preservation)
+
+이전 review의 action item이 resolve되었을 때:
+```markdown
+### Action items
+- [x] ~~Fig3B에 CI 표시 추가~~ → resolved 2026-04-30 (supersedes action from 2026-04-15)
+```
+기존 엔트리를 고치지 않고 새 엔트리에서 참조.
+
+Claim Tag 변경으로 이전 review의 finding이 무효화되었을 때:
+```markdown
+### Note
+- [L1-FAIL from 2026-04-10 review] was based on C7 tagged as `main`.
+  C7 is now `supp` (CLAIMS updated 2026-04-12). Finding superseded.
 ```
 
 ---
 
-## Severity (updated with Layer 0-1)
+## Subagent 호출 (Phase 6 이후)
 
-### CRITICAL (Layer 0-1 failures — structural redesign)
-- Story arc break: figure transition 불가
-- Premise-conclusion mismatch between figures
-- Panel has no role in argument (unnecessary)
-- Panel shows same info as another (redundant)
-- Visualization type mismatches claim type (wrong expression)
-- Figure-level conclusion doesn't support paper conclusion
+Phase 6에서 figure-review는 **독립 subagent**로 분리. 호출 규약:
+- Main agent → subagent: prompt 문자열 + FIGURE_PLAN.md/CLAIMS.md/hook.log 파일 참조
+- Subagent → main agent: REVIEW_LOG.md에 append (persistent) + 30줄 이하 summary (transient, stdout)
 
-### HIGH (Layer 2 failures — content fixes)
-- P14 FAIL: claim unsupported by visual or data mismatch
-- P15 FAIL: within-figure logic gap
-- P16 FAIL: causal verb or NS overclaiming
+현재 (Phase 1-5)는 main agent 내에서 수행. 동일 skill 스펙.
 
-### MEDIUM (Layer 3 failures — visual fixes)
-- P8-P13 individual panel issues
+---
 
-### LOW (minor polish)
-- P1-P7 minor structural issues
+## Common Pitfalls
+
+| Pitfall | Fix |
+|---------|-----|
+| Layer 0 skip하고 Layer 3 먼저 | 항상 top-down. Layer 0 FAIL이면 Layer 3 의미 없음. |
+| Exploratory draft를 review 대상으로 | Step 0-1에서 STOP. Manuscript mode 재생성 요구. |
+| Hook.log 안 읽고 review | 직전 hook FAIL을 놓침. Step 0-4 필수. |
+| REVIEW_LOG 기존 엔트리 수정 | Append-only 위반. Supersede pattern 사용. |
+| CLAIMS와 FIGURE_PLAN의 Tag mismatch를 "minor"로 분류 | Layer 1 FAIL. Paper 제출 직전 큰 리스크. |
+
+---
+
+## Handoff
+- Input: `outputs/figures/FIGURE_PLAN.md`, `docs/CLAIMS.md`, `docs/STORY.md`, `outputs/figures/hook.log` (있으면)
+- Output: `outputs/figures/REVIEW_LOG.md` (append-only)
+- Next: user가 action item resolve 후 figure-implement 재실행 또는 CLAIMS 수정 후 figure-plan 재실행
+
+**Schemas** (Phase 5):
+- `~/.claude/blueprints/schemas/REVIEW_LOG.schema.md` — 출력 엔트리 포맷 정식 스펙. 이 SKILL의 "Output protocol" 섹션과 동일 내용, schema가 canonical.
+- `~/.claude/blueprints/schemas/FIGURE_PLAN.schema.md` — 입력 파일 포맷 참조.
+- `~/.claude/blueprints/schemas/PANEL_REGISTRY.schema.md` — variant 참조 시 사용.
