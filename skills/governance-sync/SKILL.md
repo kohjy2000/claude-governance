@@ -34,7 +34,8 @@ cd ~/claude-governance && git status --short && git log -1 --format='%h %s (%ar)
 cd ~/claude-governance && git fetch --quiet 2>/dev/null && git status -sb
 # install target 편집 감지 (v1.2: #M5 강화)
 DIFF=$(diff -rq ~/claude-governance/skills     ~/.claude/skills     --exclude='.git' 2>/dev/null; \
-       diff -rq ~/claude-governance/blueprints ~/.claude/blueprints --exclude='.git' 2>/dev/null)
+       diff -rq ~/claude-governance/blueprints ~/.claude/blueprints --exclude='.git' 2>/dev/null; \
+       diff -rq ~/claude-governance/agents     ~/.claude/agents     --exclude='.git' 2>/dev/null)
 if [ -n "$DIFF" ]; then
   echo "⚠ install target 편집 감지:"
   echo "$DIFF" | head -20
@@ -86,6 +87,13 @@ Clean/ahead/behind/dirty/install-drift 5가지 케이스를 user에게 명시.
    rsync -av --delete \
      --exclude='.git' \
      ~/claude-governance/blueprints/ ~/.claude/blueprints/
+   # v1.2 Phase 6: agents sync
+   if [ -d ~/claude-governance/agents ]; then
+     rsync -av --delete \
+       --exclude='.git' \
+       --exclude='.DS_Store' \
+       ~/claude-governance/agents/ ~/.claude/agents/
+   fi
    # CLAUDE.md는 per-machine customize 가능하므로 덮어쓰지 않음. 
    # bootstrap-system이 관리.
    ```

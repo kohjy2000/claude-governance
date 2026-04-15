@@ -101,22 +101,31 @@ test -d "$REPO_DIR/blueprints" || { echo "Invalid repo structure"; exit 1; }
 
 ```bash
 mkdir -p ~/.claude/skills
+mkdir -p ~/.claude/agents           # v1.2 Phase 6: subagents
 mkdir -p ~/.claude/blueprints/templates
-mkdir -p ~/.claude/blueprints/schemas  # v1.2 신규
+mkdir -p ~/.claude/blueprints/schemas
 ```
 
 ---
 
-## Step 4: Skills 설치
+## Step 4: Skills + Agents 설치
 
 ```bash
 rsync -av --delete \
   --exclude='.git' \
   --exclude='.DS_Store' \
   "$REPO_DIR/skills/" ~/.claude/skills/
+
+# v1.2 Phase 6: agents
+if [ -d "$REPO_DIR/agents" ]; then
+  rsync -av --delete \
+    --exclude='.git' \
+    --exclude='.DS_Store' \
+    "$REPO_DIR/agents/" ~/.claude/agents/
+fi
 ```
 
-v1.2 변경: `cp -r` 대신 `rsync --delete` — `governance-sync pull`과 동일 로직. 설치본이 작업본 mirror가 되도록 보장.
+v1.2 변경: `cp -r` 대신 `rsync --delete` — `governance-sync pull`과 동일 로직. 설치본이 작업본 mirror가 되도록 보장. Agents 디렉토리는 Phase 6에서 introduced된 subagent 저장소.
 
 ---
 

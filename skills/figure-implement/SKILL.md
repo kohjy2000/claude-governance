@@ -263,37 +263,48 @@ R이 아닌 Python:
 
 ---
 
-## Step N (last): Auto-invoke figure-review — **SKILL CONTRACT, 생략 금지**
+## Step N (last): Dispatch figure-reviewer subagent — **SKILL CONTRACT, 생략 금지**
 
-Panel 생성 + PANEL_REGISTRY append가 끝나면 **반드시 이 turn 내에 다음을 실행**:
+Panel 생성 + PANEL_REGISTRY append가 끝나면 **반드시 이 turn 내에 Task tool로 figure-reviewer subagent를 spawn**:
 
 ```
-/figure-review --auto Fig{N}
+Agent (subagent_type="figure-reviewer", description="Review Fig{N}",
+       prompt="Review Fig{N} in the current project. Read outputs/figures/FIGURE_PLAN.md, docs/CLAIMS.md, outputs/figures/PANEL_REGISTRY.md, and outputs/figures/hook.log if present. Write one REVIEW_LOG entry per the REVIEW_LOG schema. Return 3-line summary.")
 ```
 
-### 왜 생략 금지인가
-- figure-implement와 figure-review는 **atomic pair**. implement만 돌고 review가 생략되면 REVIEW_LOG의 append-only audit trail이 끊어짐.
-- Phase 6에서 이 호출은 hook + subagent로 hard-enforce될 예정. 현재(Phase 1-5)는 skill 지시로 soft-enforce.
-- user가 명시적으로 `--skip-review`를 argument로 전달한 경우에만 생략 허용.
+### 왜 subagent인가 (Phase 6 변경)
+- figure-implement와 figure-review는 **atomic pair**. implement만 돌고 review가 생략되면 REVIEW_LOG append-only audit trail이 끊어짐.
+- Phase 5.5의 slash command chain (`/figure-review --auto`)은 smoke test에서 **skip되는 것 확인됨** (soft enforcement 한계).
+- Phase 6에서 Task tool dispatch로 격상 — subagent description이 "Use PROACTIVELY after figure-implement completes"라 Claude가 자동 delegation 경향 강화.
+- Full hard enforcement는 PostToolUse hook (Phase 6 Turn 2)에서 추가 보강 예정.
 
-### Enforcement checklist (LLM은 이 체크를 통과해야 figure-implement turn 완료)
+### Enforcement checklist (LLM이 이 turn 완료 전에 체크)
 
 ```
 [ ] panels/ 디렉토리에 기대한 파일 생성됨
 [ ] PANEL_REGISTRY.md에 새 row append됨
-[ ] /figure-review --auto Fig{N} 호출 완료
-[ ] REVIEW_LOG.md에 새 Review entry append됨
+[ ] figure-reviewer subagent를 Task tool로 spawn함
+[ ] Subagent가 REVIEW_LOG.md에 새 Review entry append함 (subagent 반환 후 grep으로 확인)
+[ ] Subagent 3줄 요약을 user에게 보고함
 ```
 
-4번째 checkbox까지 통과하지 못하면 figure-implement는 **불완전 완료**. User에게 상태 명시 보고 후 남은 step 수동 실행 요청.
+4번째까지 통과하지 못하면 figure-implement는 **불완전 완료**. Subagent가 FAIL 반환했으면 원인 + action item을 user에 명시.
 
-### 호출 결과
-- `outputs/figures/FIGURE_PLAN.md`, `CLAIMS.md`, `PANEL_REGISTRY.md` (방금 업데이트됨)를 input으로.
-- Layer 0-3 review 후 `REVIEW_LOG.md`에 narrative 엔트리 append.
-- 결과 요약 3줄을 user에게 즉시 보고.
+### Task tool 사용이 안 되는 경우 (fallback)
 
-### Phase 6 이후
-figure-implement 종료를 SubagentStop/TaskCompleted hook이 감지해 figure-reviewer subagent로 자동 dispatch. 그때 이 Step N의 soft enforcement는 hard enforcement로 승격됨. 현재(Phase 1-5)는 skill 지시가 유일한 gate.
+- Main thread가 이미 subagent (`claude --agent`로 실행된 경우) → subagent는 또 spawn 못 함. 이때만 legacy slash command `/figure-review --auto Fig{N}` 로 fallback.
+- User가 명시적으로 `--skip-review`를 argument로 전달한 경우 생략 허용.
+
+### Return 처리
+
+Subagent가 반환하는 3줄 중 Overall 필드 기반:
+- `PASS`: user에게 "Review completed clean." 간단 보고.
+- `L0-FAIL` / `L1-FAIL`: user에게 즉시 STOP 권고 + REVIEW_LOG의 Action items 강조.
+- `L2-FAIL`: panel-level 수정 action items 안내.
+- `L3-issues-only`: 기계적 경고 있음, 최종 review는 다음 invocation에서.
+
+### Phase 6 Turn 2 이후
+PostToolUse hook이 figure-implement의 마지막 Write/Edit 감지 → settings.json의 hook config가 이 dispatch를 system-level enforce. 그때 이 Step N의 soft enforcement는 redundant safety layer가 됨.
 
 ---
 
