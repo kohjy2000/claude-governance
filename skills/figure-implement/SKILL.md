@@ -263,22 +263,37 @@ R이 아닌 Python:
 
 ---
 
-## Step N (last): Auto-invoke figure-review (v1.2)
+## Step N (last): Auto-invoke figure-review — **SKILL CONTRACT, 생략 금지**
 
-Panel 생성 완료 후 **반드시** 다음을 마지막 단계로 실행:
+Panel 생성 + PANEL_REGISTRY append가 끝나면 **반드시 이 turn 내에 다음을 실행**:
 
 ```
 /figure-review --auto Fig{N}
 ```
 
-이 호출은:
+### 왜 생략 금지인가
+- figure-implement와 figure-review는 **atomic pair**. implement만 돌고 review가 생략되면 REVIEW_LOG의 append-only audit trail이 끊어짐.
+- Phase 6에서 이 호출은 hook + subagent로 hard-enforce될 예정. 현재(Phase 1-5)는 skill 지시로 soft-enforce.
+- user가 명시적으로 `--skip-review`를 argument로 전달한 경우에만 생략 허용.
+
+### Enforcement checklist (LLM은 이 체크를 통과해야 figure-implement turn 완료)
+
+```
+[ ] panels/ 디렉토리에 기대한 파일 생성됨
+[ ] PANEL_REGISTRY.md에 새 row append됨
+[ ] /figure-review --auto Fig{N} 호출 완료
+[ ] REVIEW_LOG.md에 새 Review entry append됨
+```
+
+4번째 checkbox까지 통과하지 못하면 figure-implement는 **불완전 완료**. User에게 상태 명시 보고 후 남은 step 수동 실행 요청.
+
+### 호출 결과
 - `outputs/figures/FIGURE_PLAN.md`, `CLAIMS.md`, `PANEL_REGISTRY.md` (방금 업데이트됨)를 input으로.
 - Layer 0-3 review 후 `REVIEW_LOG.md`에 narrative 엔트리 append.
 - 결과 요약 3줄을 user에게 즉시 보고.
 
-Skip하려면 user가 명시적으로 `--skip-review` argument 전달 (향후 옵션).
-
-**Phase 6 이후**: figure-implement 완료를 PostToolUse hook이 감지해 subagent로 /figure-review dispatch. 현재 (Phase 1-5)는 skill 내부에서 마지막 단계로 호출.
+### Phase 6 이후
+figure-implement 종료를 SubagentStop/TaskCompleted hook이 감지해 figure-reviewer subagent로 자동 dispatch. 그때 이 Step N의 soft enforcement는 hard enforcement로 승격됨. 현재(Phase 1-5)는 skill 지시가 유일한 gate.
 
 ---
 
