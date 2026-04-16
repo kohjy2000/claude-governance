@@ -3,7 +3,7 @@
 > **Primary consumer**: `figure-implement` (reads), `figure-review` (audits), `figure-assemble` (layout).
 > **Producer**: `figure-plan`.
 > **Format**: Markdown, LLM-read.
-> **Location**: `<project>/outputs/figures/FIGURE_PLAN.md`.
+> **Location**: `<project>/docs_figure/figure_pipeline/design_docs/Fig{N}_design.md` (Phase 6+, per-figure). Legacy: `<project>/outputs/figures/FIGURE_PLAN.md`.
 
 ---
 

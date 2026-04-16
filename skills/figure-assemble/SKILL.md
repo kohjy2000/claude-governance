@@ -12,9 +12,10 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion
 Figure compositor. 개별 panel PDF/PNG를 최종 multi-panel figure로 조립.
 Journal spec에 맞춰 크기, 배치, 라벨링 수행.
 
-**v1.2 변경**:
-- Input: `outputs/figures/PANEL_REGISTRY.md` (schema v1.0) 우선 참조.
+**v1.2 변경 (Phase 6+ path update)**:
+- Input: `docs_figure/PANEL_REGISTRY.md` (schema v1.0) 우선 참조.
 - Variant 자동 선택은 `Status: selected` 엔트리 기준.
+- Panels from `output/panels/`, code from `code/`, assembled to `output/figures/`.
 
 **Schemas**:
 - `~/.claude/blueprints/schemas/PANEL_REGISTRY.schema.md`
@@ -38,11 +39,11 @@ Default (Nature):   89 mm            -              183 mm          170 mm
 
 ### Step 1: Panel Inventory (v1.2)
 
-**First source**: `outputs/figures/PANEL_REGISTRY.md` — Status=selected 엔트리만 pick.
+**First source**: `docs_figure/PANEL_REGISTRY.md` — Status=selected 엔트리만 pick.
 
 ```r
 # Parse registry
-registry <- read_delim("outputs/figures/PANEL_REGISTRY.md", 
+registry <- read_delim("docs_figure/PANEL_REGISTRY.md", 
                        delim="|", trim_ws=TRUE, skip=header_rows) %>%
   filter(Status == "selected", str_detect(Panel, paste0("^", fig_id)))
 ```
@@ -52,7 +53,7 @@ registry <- read_delim("outputs/figures/PANEL_REGISTRY.md",
 - 마지막 폴백: variant=v1 자동 선택.
 
 ```r
-panels <- list.files("outputs/figures/panels", pattern = "^FigN_.*\\.pdf$")
+panels <- list.files("output/panels", pattern = "^FigN_.*\\.pdf$")
 panel_groups <- split(panels, str_extract(panels, "_[A-Z]_"))
 ```
 
@@ -94,7 +95,7 @@ FIGURE_PLAN.md의 Paper-Level Story Arc를 참조해 figure role에 맞는 layou
 library(patchwork)
 
 # Load panels
-pA <- readRDS("outputs/figures/panels/Fig1_A_v2-forest.rds")  # if saved as RDS
+pA <- readRDS("output/panels/Fig1_A_v2-forest.rds")  # if saved as RDS
 # OR re-source the figure script and capture plot objects
 
 assembled <- pA + pB + pC + pD + pE +
@@ -110,14 +111,14 @@ assembled <- pA + pB + pC + pD + pE +
   )
 
 ggsave(
-  "outputs/figures/assembled/Fig1_assembled.pdf",
+  "output/figures/Fig1_assembled.pdf",
   assembled,
   width = 183, height = 170,
   units = "mm",
   device = cairo_pdf
 )
 ggsave(
-  "outputs/figures/assembled/Fig1_assembled.png",
+  "output/figures/Fig1_assembled.png",
   assembled,
   width = 183, height = 170,
   units = "mm",
@@ -162,8 +163,8 @@ assembled <- pA + pB + pC + pD_wrapped + pE_wrapped +
 
 ```r
 # assemble_Fig1.R
-source("outputs/figures/code/00_common.R")
-source("outputs/figures/code/Fig1_<topic>.R")  # creates plot_fig1_X functions
+source("code/00_common.R")
+source("code/Fig1_<topic>.R")  # creates plot_fig1_X functions
 
 # --- PANEL_REGISTRY에서 selected variant 읽기 ---
 # (pseudo — 실제 구현은 registry parsing helper 필요)
@@ -191,11 +192,11 @@ fig <- pA + pB + pC + pD + pE +
   theme(plot.margin = margin(2, 2, 2, 2))
 
 ggsave(
-  "outputs/figures/assembled/Fig1_assembled.pdf",
+  "output/figures/Fig1_assembled.pdf",
   fig, width = 183, height = 150, units = "mm", device = cairo_pdf
 )
 ggsave(
-  "outputs/figures/assembled/Fig1_assembled.png",
+  "output/figures/Fig1_assembled.png",
   fig, width = 183, height = 150, units = "mm", dpi = 300
 )
 
@@ -220,11 +221,18 @@ ggsave(..., width = 183, height = 240, units = "mm")
 ## Output
 
 ```
-outputs/figures/assembled/
+output/figures/
 ├── Fig1_assembled.pdf     # 183 x Nmm, Nature full-width
 ├── Fig1_assembled.png     # 300 dpi
 ├── Fig2_assembled.pdf
 └── SuppS_H2S_assembled.pdf
+
+# Phase 6+ directory structure:
+# docs_figure/PANEL_REGISTRY.md  ← variant selection (input)
+# code/00_common.R               ← shared theme/palette
+# code/Fig{N}.R                   ← per-figure scripts
+# output/panels/                  ← individual panel artifacts
+# output/figures/                 ← assembled figures (output)
 ```
 
 ---
@@ -246,7 +254,7 @@ outputs/figures/assembled/
 
 ## v1.2 요약
 
-- Input: PANEL_REGISTRY.md 우선.
-- Fallback: 디렉토리 스캔 + user 확인.
-- 경로: 모든 output이 `outputs/figures/assembled/` 하위.
+- Input: `docs_figure/PANEL_REGISTRY.md` 우선.
+- Fallback: `output/panels/` 디렉토리 스캔 + user 확인.
+- 경로: 코드 `code/`, 패널 `output/panels/`, 조립 결과 `output/figures/`.
 - Status=selected 아닌 variant는 assembled figure에 포함하지 않음.
