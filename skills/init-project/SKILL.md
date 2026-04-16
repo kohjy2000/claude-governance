@@ -1,16 +1,17 @@
 ---
 name: init-project
-description: Initialize a new research project with standard governance structure. v1.2 adds CLAIMS.md as 6th SSOT doc and explicit "no outputs/ auto-creation" rule.
+description: Initialize a new research project with Layer 1 governance structure (docs/ + reference/ + scripts scaffolding). Layer 2 (figure pipeline) is created separately by /figure-init. v1.2 adds CLAIMS.md (hierarchical C0-C4 groups + 4-tag), reference/ directory for figure style/catalog, and explicit "no outputs/ auto-creation" rule.
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion
 ---
 
-# /init-project — 새 프로젝트 초기 세팅
+# /init-project — 새 프로젝트 초기 세팅 (Layer 1)
 
 `$ARGUMENTS`에 프로젝트 경로가 주어지면 해당 경로를 사용. 없으면 현재 디렉토리.
 
 **v1.2 변경사항**:
-- `docs/CLAIMS.md` 추가 (6번째 SSOT doc).
-- `outputs/` 디렉토리는 자동 생성 **안 함** — 필요 시 `/init-output <type>`.
+- `docs/CLAIMS.md` 추가 (hierarchical C0-C4 groups + 4-tag placement).
+- `reference/{papers,catalog}/` 디렉토리 scaffold (figure pipeline 준비).
+- `docs_figure/`, `output/`, `code/` 자동 생성 **안 함** — `/figure-init`이 담당 (Layer 2).
 
 ---
 
@@ -30,24 +31,33 @@ Advanced/Simple 분기는 CLAUDE.md diet 이후 기본 Simple (CLAUDE.md만).
 
 ---
 
-## Step 2: 디렉토리 구조 생성
+## Step 2: 디렉토리 구조 생성 (Layer 1 only)
 
 ```
 <project_root>/
 ├── CLAUDE.md
-├── docs/
+├── docs/                      # Layer 1 SSOT
 │   ├── README.md
 │   ├── STORY.md
-│   ├── CLAIMS.md          # v1.2 신규
+│   ├── CLAIMS.md              # v1.1 hierarchical (C0-C4) + 4-tag
 │   ├── DATA_MAP.md
 │   ├── PIPELINE.md
 │   └── JOB_LOG.md
+├── reference/                 # Figure pipeline input (v1.2 추가)
+│   ├── papers/                # 레퍼런스 논문 PDF (style 추출용)
+│   │   └── .gitkeep
+│   └── catalog/               # 레퍼런스 R/Py 스크립트 (SCRIPT_CATALOG 생성)
+│       └── .gitkeep
 ├── 01_data/
 ├── 02_results/
 └── 03_scripts/
 ```
 
-**`outputs/`는 만들지 않는다.** Figure 작업 시작 시 `/init-output figures`, writing 시작 시 `/init-output writing`, grant 시작 시 `/init-output grant` 호출로 각 type 의식적으로 초기화.
+**만들지 않는 것** (의식적 단계로 분리):
+- `docs_figure/`, `code/`, `output/` → figure 작업 시작 시 `/figure-init`이 생성 (Layer 2).
+- `outputs/writing/`, `outputs/grant/` → writing/grant 전용 skill이 나중에 설계될 때 도입.
+
+**`reference/papers/`** 와 **`reference/catalog/`** 는 .gitkeep만 있는 빈 디렉토리. User가 수동으로 PDF와 R script를 넣은 후 `/figure-init` 호출 시점에 `/figure-style-extract`가 파싱.
 
 ---
 
@@ -86,11 +96,11 @@ Last updated: <DATE>
 ### 4-2. STORY.md (v1.2 template)
 `STORY_template.md` 복사. Narrative-only 원칙 + Document Discipline 섹션 포함.
 
-### 4-3. CLAIMS.md (v1.2 신규 — 필수)
+### 4-3. CLAIMS.md (v1.1 hierarchical — 필수)
 ```bash
 cp ~/.claude/blueprints/templates/CLAIMS_template.md docs/CLAIMS.md
 ```
-Header의 `{{PROJECT_NAME}}`, `{{DATE}}`, `{{TARGET_PAPER}}`, `{{SECONDARY_PAPER}}` 치환. 빈 claim (C1) 템플릿은 그대로 유지 — user가 첫 엔트리 작성.
+Header의 `{{PROJECT_NAME}}`, `{{DATE}}`, `{{TARGET_PAPER}}`, `{{SECONDARY_PAPER}}` 치환. 빈 claim 템플릿은 `### C0-1` stub으로 유지 — user가 첫 엔트리 작성 (Group + Tag 설정).
 
 ### 4-4. DATA_MAP.md
 기존 템플릿 (base paths table, input data TODO, conda).
@@ -110,7 +120,10 @@ test -f CLAUDE.md || echo "FAIL: CLAUDE.md"
 for d in README STORY CLAIMS DATA_MAP PIPELINE JOB_LOG; do
   test -f docs/$d.md || echo "FAIL: docs/$d.md"
 done
-test ! -d outputs && echo "OK: outputs/ not auto-created"
+test -d reference/papers  && echo "OK: reference/papers created"
+test -d reference/catalog && echo "OK: reference/catalog created"
+test ! -d docs_figure && echo "OK: docs_figure/ not auto-created (use /figure-init)"
+test ! -d output      && echo "OK: output/ not auto-created (use /figure-init)"
 ```
 
 ---
@@ -118,25 +131,29 @@ test ! -d outputs && echo "OK: outputs/ not auto-created"
 ## Step 6: 요약 출력
 
 ```
---- Project Initialized ---
+--- Project Initialized (Layer 1) ---
 Project: <PROJECT_NAME>
 Location: <project_root>
 SSOT docs: 6 (README, STORY, CLAIMS, DATA_MAP, PIPELINE, JOB_LOG)
+Reference scaffold: reference/{papers,catalog}/ (empty, populate before /figure-init)
 Conda env: <ENV_NAME>
 Target paper: <primary>
 
 다음 단계:
 1. docs/DATA_MAP.md 채우기 (입력 데이터 경로)
 2. docs/PIPELINE.md 채우기 (분석 step)
-3. 첫 claim 발견 시 docs/CLAIMS.md 업데이트
-4. Figure 작업 시작 시 /init-output figures
-5. SLURM job 제출 시 /submit-job
+3. 첫 claim 발견 시 docs/CLAIMS.md 업데이트 (Group: C0/C1/C2/C3/C4 + Tag: main/supp/...)
+4. SLURM job 제출 시 /submit-job
+5. Figure 작업 전 reference/papers/에 레퍼런스 논문 PDF, reference/catalog/에 레퍼런스 R script 배치
+6. Figure 작업 시작 시 /figure-init — docs_figure/ 생성 + STYLE_GUIDE + SCRIPT_CATALOG 추출
+7. 개별 figure 구축 시 /figure-build target=Fig{N}
 ---
 ```
 
 ---
 
 ## 주의사항
-- `outputs/` 자동 생성 **금지**. 필요 시 `/init-output`.
-- CLAIMS.md는 첫 claim이 없어도 파일 자체는 생성 — figure-plan exploratory mode가 이를 읽을 수 있어야.
+- `docs_figure/`, `output/`, `code/` **자동 생성 금지**. `/figure-init`이 담당 (Layer 2 boundary).
+- `reference/{papers,catalog}/`는 scaffold만. User가 실제 파일을 넣지 않으면 `/figure-init`이 fallback (Nature 기본값).
+- CLAIMS.md는 첫 claim이 없어도 파일 자체는 생성 — C0-1 stub으로. Figure 작업 시작 전에 적어도 1개 claim 필요.
 - Advanced project (AGENTS.md)는 현재 스펙에서 제거. 필요하면 user 수동 추가.
