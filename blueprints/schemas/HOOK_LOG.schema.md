@@ -1,7 +1,7 @@
 # hook.log Schema v1.0
 
 > **Purpose**: PostToolUse hook이 매 figure-implement 실행 후 mechanical check 결과를 append하는 로그 파일. Phase 6 이후 hook 구현체가 생성 주체.
-> **Location**: `<project>/outputs/figures/hook.log`.
+> **Location**: `<project>/docs_figure/hook.log` (Phase 6+). Legacy: `<project>/outputs/figures/hook.log`.
 > **Consumer**: `figure-review` subagent가 invoke 시 직전 엔트리 이후 범위를 aggregate하여 REVIEW_LOG로 승격.
 > **Separation from REVIEW_LOG.md**: hook.log는 기계적, dev artifact. REVIEW_LOG는 사람 읽는 audit trail.
 

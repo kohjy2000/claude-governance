@@ -65,13 +65,13 @@
 - **Owner**: user.
 - **Related**: `skills/governance-sync/SKILL.md`의 "Conflict 처리 원칙" 블록.
 
-### [ ] #3: figure-review Layer 3의 hook 이전
+### [ ] #3: figure-review Layer 3의 hook 이전 — **부분 완료**
 - **Raised**: 2026-04-15 (Phase 1 Turn 2)
 - **Context**: 현재 figure-review skill 내부에 Layer 3 (P1-P13 mechanical grep)이 있음. Phase 6에서 PostToolUse hook이 이 역할을 담당하도록 설계됨.
-- **Trigger to evaluate**: Phase 6 hook 구현 완료 시점.
-- **Action**: figure-review SKILL.md의 Layer 3 섹션을 hook 코드로 이전. SKILL.md에는 "hook이 처리함" 요약과 hook.log 포맷 reference만 남김.
+- **Phase 6 Turn 3 진행 상황**: `lint-figures.sh` hook 구현 완료 (C6 palette, A1 assertion, CC1 ggsave, V7 banned verb). PANEL_REGISTRY.md Edit trigger. hook.log + REVIEW_LOG FAIL escalation 작동.
+- **Remaining**: figure-review SKILL.md의 Layer 3 섹션을 "hook이 처리함 — hook.log 참조" 수준으로 축소. 실전 테스트 후 확정.
 - **Owner**: user.
-- **Related**: `skills/figure-review/SKILL.md`의 "Layer 3" 섹션 말미 [hook-owned in Phase 6] 마커.
+- **Related**: `skills/figure-review/SKILL.md`의 "Layer 3" 섹션, `~/.claude/hooks/lint-figures.sh`.
 
 ### [ ] #4: REVIEW_LOG.md aggregate 자동화
 - **Raised**: 2026-04-15 (Phase 1 Turn 2)
@@ -160,7 +160,8 @@
 - #P2 (hook trigger semantics) — tool 단위 matcher 기반 확정. "스킬 완료 감지"는 불가, "Write/Edit/Bash 단위 매칭"이 실제 메커니즘.
 - #P3 (subagent invocation) — Task tool (= Agent tool 2.1.63 rename) 확정. `~/.claude/agents/` + frontmatter YAML 포맷.
 - #P4 (AskUserQuestion in subagent) — subagent는 기본 독립 동작 가정. figure-reviewer subagent는 AskUserQuestion 제외, 모호한 질문은 Action items로 REVIEW_LOG에 남기고 main agent가 user에 위임.
-- Schema path migration (Turn 2 Session D) — PANEL_REGISTRY, REVIEW_LOG, OUTPUTS 경로를 docs_figure/로 업데이트 완료.
+- Schema path migration (Turn 2 Session D) — PANEL_REGISTRY, REVIEW_LOG, OUTPUTS, HOOK_LOG 경로를 docs_figure/로 업데이트 완료.
+- Phase 6 Turn 3 PostToolUse hook — lint-figures.sh 구현 + settings.json 등록. C6/A1/CC1/V7 체크. PANEL_REGISTRY Edit trigger → hook.log + REVIEW_LOG FAIL escalation.
 
 ---
 
