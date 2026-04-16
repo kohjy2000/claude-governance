@@ -15,7 +15,7 @@
 
 ### [ ] #-1: GitHub remote 연동 + 3개 머신 sync 실제 가동
 - **Raised**: 2026-04-15 (Phase 0 복구 시점)
-- **Context**: 현재 `~/code/claude-governance/`는 local git repo만 존재. GitHub에 push 안 됨 (SSH 키 미등록). Cross-phase constraint #7 ("GitHub = source of truth")이 문서상으로만 선언됨.
+- **Context**: 현재 `~/claude-governance/`는 local git repo만 존재. GitHub에 push 안 됨 (SSH 키 미등록). Cross-phase constraint #7 ("GitHub = source of truth")이 문서상으로만 선언됨.
 - **Trigger to evaluate**: 2번째 머신(biotech dev server 또는 HPC)에서 작업 시작해야 할 시점.
 - **Action**:
   1. GitHub SSH 키 등록 (or PAT-based HTTPS)
@@ -33,26 +33,17 @@
 - **Action**: DRAFT_LOG.schema.md (manuscript 진행 추적) 및 AIMS.schema.md (aims section 구조 + claim linkage) 작성. 해당 skill (draft-helper, grant-helper 등) 설계 동반 필요.
 - **Owner**: user.
 
-### [ ] #-3: figure-implement / figure-assemble SKILL에 Phase 5 schema reference 추가
-- **Raised**: 2026-04-15 (Phase 5)
-- **Context**: Phase 5에서 FIGURE_PLAN.schema.md, PANEL_REGISTRY.schema.md, REVIEW_LOG.schema.md 작성됨. figure-plan과 figure-review에는 reference line 추가했으나 figure-implement와 figure-assemble은 Phase 1-5에서 건드리지 않음.
-- **Trigger to evaluate**: Phase 6 kickoff, 또는 figure-implement/assemble이 schema 불일치로 오동작 시.
-- **Action**: 두 SKILL의 Handoff 섹션에 `Schema: ~/.claude/blueprints/schemas/{FIGURE_PLAN|PANEL_REGISTRY}.schema.md` 참조 한 줄씩.
-- **Owner**: user.
+### [x] #-3: figure-implement / figure-assemble SKILL에 Phase 5 schema reference 추가
+- **Raised**: 2026-04-15 (Phase 5). **Closed**: 2026-04-15 (Phase 5.5).
+- Phase 5.5에서 figure-implement_SKILL.md와 figure-assemble_SKILL.md 신규본 작성 시 schema reference 라인 + PANEL_REGISTRY 통합 로직 추가.
 
-### [ ] #-2: init-project 스킬 Phase 4 원칙 반영
-- **Raised**: 2026-04-15 (Phase 4)
-- **Context**: `/init-project`는 신규 프로젝트 생성 시 `docs/`만 만든다. `outputs/`는 `/init-output` 호출로만 생성 (의식적 단계). 현재 init-project SKILL이 이 원칙을 명시하지 않음.
-- **Trigger to evaluate**: Phase 5 kickoff.
-- **Action**: `skills/init-project/SKILL.md`에 "outputs/ 생성 안 함. 필요 시 /init-output 호출" 한 줄 추가.
-- **Owner**: user.
+### [x] #-2: init-project 스킬 Phase 4 원칙 반영
+- **Raised**: 2026-04-15 (Phase 4). **Closed**: 2026-04-15 (Phase 5.5).
+- init-project_SKILL.md Step 2에 "outputs/는 만들지 않는다. /init-output으로 명시 초기화" 박음.
 
-### [ ] #0: figure-implement 스킬에 figure-review auto-invoke 라인 추가
-- **Raised**: 2026-04-15 (Phase 1 Turn 2, Q1 결정 이후)
-- **Context**: figure-review를 figure-implement 완료 시 자동 호출하기로 결정. figure-review 쪽 스펙은 Turn 2에서 반영됨. figure-implement SKILL.md에 호출 라인 추가는 Phase 2 범위로 보류.
-- **Trigger to evaluate**: Phase 2 kickoff.
-- **Action**: `skills/figure-implement/SKILL.md` 마지막 step에 "/figure-review --auto 호출" 지시 추가.
-- **Owner**: user.
+### [x] #0: figure-implement 스킬에 figure-review auto-invoke 라인 추가
+- **Raised**: 2026-04-15 (Phase 1 Turn 2). **Closed**: 2026-04-15 (Phase 5.5).
+- figure-implement_SKILL.md의 Step N (last)에 `/figure-review --auto` 호출 지시 추가. Phase 6에서 hook 기반으로 승격 예정 (아래 #P1-P4 참조).
 
 ### [ ] #1: CLAIMS.schema.md format upgrade (A → B)
 - **Raised**: 2026-04-15 (Phase 1 Turn 2)
@@ -97,6 +88,58 @@
 - **Action**: Required로 승격 시 CLAIMS.schema.md v1.1 발표 (optional → required는 non-breaking).
 - **Owner**: user.
 
+### [ ] #P1-P4: Claude Code hook/subagent docs 확인 (Phase 6 precondition)
+- **Raised**: 2026-04-15 (Dry review #2)
+- **Context**: Phase 6 구현이 Claude Code 공식 hook + subagent mechanism에 의존. 현재 내 추정 기반 설계. Docs 확인으로 실제 spec 확정 필요.
+- **Action**:
+  - P1: PostToolUse hook config 파일 위치 + trigger semantics
+  - P2: Hook이 figure-implement "완료" 감지 방법
+  - P3: Subagent invocation API (Task tool 여부)
+  - P4: Subagent에서 AskUserQuestion 가능 여부
+- **Owner**: user (또는 Claude WebFetch로 진행).
+- **Trigger**: Phase 6 kickoff 전 필수.
+
+### [x] #SMOKE-AUTO-INVOKE: figure-implement → figure-review auto-invoke soft enforcement 실패 확인
+- **Raised**: 2026-04-15 (Phase 1-5 smoke test Level 3)
+- **Closed**: 2026-04-15 (Phase 6 Turn 2 Session C)
+- **Resolution**: figure-implement Step N을 Task tool dispatch로 격상. `Agent(subagent_type="figure-reviewer", model=model_choice, ...)` 형태로 hard enforcement. Dynamic model selection (opus for figure/multimodal, sonnet otherwise) 포함. Hook enforcement (Turn 3)는 #3에서 별도 추적.
+
+### [x] #R1/R5/R7: Phase 6 구현 위험 체크리스트
+- **Raised**: 2026-04-15 (Dry review #2)
+- **Closed**: 2026-04-15 (Phase 6 Turn 2 Session D)
+- **Resolution**:
+  - R1: PostToolUse hook은 tool 단위 matcher (Write/Edit). 스킬 완료 감지 불가 → Task tool dispatch로 해결 (#P2 참조).
+  - R5: Subagent는 AskUserQuestion 없음 → REVIEW_LOG Action items에 질문 기록, main agent가 user에 위임 (#P4 참조).
+  - R7: Multi-session 계획 실행 중 — Turn 1 (pre-check+docs), Turn 2 (Session A-D legacy merge + schema), Turn 3 (hook), Turn 4 (Layer 4 multimodal test).
+
+### [ ] #MIN-6: Phase 5.5 Minor 정합성 이슈 6개
+- **Raised**: 2026-04-15 (Dry review #2)
+- **항목**:
+  - A: FIGURE_PLAN.schema Panel `Role` 필드 — figure-plan SKILL Step 2-2에도 반영
+  - E: CLAIMS_template 주석에 `Source script` exploratory optional 명시
+  - F: figure-implement의 `save_panel()` R 코드 — draft Status 시 Selected at 비우기
+  - G: session-resume 3줄 요약에서 multi non-terminal jobs 표기 방법
+  - J: figure-review가 empty placeholder FIGURE_PLAN (figure-plan-step0 마커 부재) 처리 명시
+  - L: session-resume STORY.md refactor 후 "마지막 section" 해석 구체화
+- **Action**: 실사용 중 터지면 개별 수정. 선제 수정 불필요.
+- **Owner**: user.
+
+### [ ] #ENF: Validation enforcer 부재 보완
+- **Raised**: 2026-04-15 (Dry review #2, self-bias #3)
+- **Context**: Schema rule들이 현재 아무도 체크 안 함. Hook (Phase 6)이 enforcer 될 예정이지만 그 전까지 gap.
+- **Option**: 경량 `/validate-governance` skill — bash+grep 기반 수동 호출. CLAIMS banned verb, JOB_LOG enum, FIGURE_PLAN 필수 필드 정도만.
+- **Trigger to evaluate**: Phase 6 착수 지연 시, 또는 첫 schema violation이 user를 혼란시킬 때.
+- **Owner**: user (결정).
+
+### [ ] #EXP: Exploratory mode 악용 방지
+- **Raised**: 2026-04-15 (Dry review #2, self-bias #4)
+- **Context**: `figure-plan --exploratory` 가 "쉬운 길"로 남용되면 manuscript gate 무의미해짐. 첫 리뷰의 "rating theater" 위험이 mode 형태로 재발할 수 있음.
+- **Option**:
+  - (a) Exploratory draft에 "30일 이상 경과 시 manuscript mode로 승격 권고" soft gate
+  - (b) figure-review에서 exploratory-status claim이 FIGURE_PLAN의 main figure에 있으면 WARN 승격
+- **Trigger**: 첫 manuscript 작성 단계 진입 시점에 재평가.
+- **Owner**: user.
+
 ### [ ] #6: Strength rating 4-tag의 월간 review 필요성 재평가
 - **Raised**: 2026-04-15 (Phase 1, 첫 review 때 지적)
 - **Context**: 4-tag 전환으로 rating theater 위험은 낮아졌으나, 프로젝트 framing 변화 시 tag drift는 여전히 발생 가능.
@@ -108,12 +151,21 @@
 
 ## Closed
 
-(아직 없음)
+- #-2 (init-project Phase 4 원칙) — Phase 5.5에서 해결
+- #-3 (figure-implement/assemble schema reference) — Phase 5.5에서 해결
+- #0 (figure-review auto-invoke 라인) — Phase 5.5에서 해결 (slash command 수준)
+- #SMOKE-AUTO-INVOKE — Phase 6 Turn 2 Session C에서 완전 해결. Task tool dispatch + dynamic model selection.
+- #R1/R5/R7 — Phase 6 Turn 2에서 전부 해결. 상세는 각 항목 참조.
+- #P1 (hook config 위치) — `~/.claude/settings.json` 또는 `.claude/settings.json`, JSON 포맷 확정 (Phase 6 Turn 1 pre-check)
+- #P2 (hook trigger semantics) — tool 단위 matcher 기반 확정. "스킬 완료 감지"는 불가, "Write/Edit/Bash 단위 매칭"이 실제 메커니즘.
+- #P3 (subagent invocation) — Task tool (= Agent tool 2.1.63 rename) 확정. `~/.claude/agents/` + frontmatter YAML 포맷.
+- #P4 (AskUserQuestion in subagent) — subagent는 기본 독립 동작 가정. figure-reviewer subagent는 AskUserQuestion 제외, 모호한 질문은 Action items로 REVIEW_LOG에 남기고 main agent가 user에 위임.
+- Schema path migration (Turn 2 Session D) — PANEL_REGISTRY, REVIEW_LOG, OUTPUTS 경로를 docs_figure/로 업데이트 완료.
 
 ---
 
 ## Meta
 
-- 이 파일은 `~/code/claude-governance/PHASE_6_TODO.md`에 위치. 설치본(`~/.claude/`)에는 포함 안 함 — 개발 문서이므로.
+- 이 파일은 `~/claude-governance/PHASE_6_TODO.md`에 위치. 설치본(`~/.claude/`)에는 포함 안 함 — 개발 문서이므로.
 - Phase 진행 중 새로 미뤄지는 이슈는 `## Open` 하단에 append.
 - Phase 6 kickoff 외에도 주요 phase transition 시점(Phase 2→3, 3→4 등)에 훑어볼 것.

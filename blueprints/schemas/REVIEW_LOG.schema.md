@@ -2,8 +2,8 @@
 
 > **Primary consumer**: `figure-review` subagent (figures), future `grant-review` (grant). Phase 6 hook writes FAIL escalation entries.
 > **Locations**:
-> - `<project>/outputs/figures/REVIEW_LOG.md` — figure review trail
-> - `<project>/outputs/grant/REVIEW_LOG.md` — grant review trail
+> - `<project>/docs_figure/REVIEW_LOG.md` — figure review trail (Phase 6+). Legacy: `<project>/outputs/figures/REVIEW_LOG.md`.
+> - `<project>/outputs/grant/REVIEW_LOG.md` — grant review trail (unchanged)
 > **Purpose**: Audit trail. Paper 제출 시 reviewer에게 제공 가능한 수준. Append-only.
 > **이 schema는 figures/grant 공용**. Entry type으로 domain 구분.
 
@@ -13,7 +13,7 @@
 
 ```
 enum.EntryType    : subagent-review | hook-fail | note | grant-review
-enum.Layer        : L0 | L1 | L2 | L3
+enum.Layer        : L0 | L1 | L2 | L3 | L4
 enum.Severity     : FAIL | WARN | INFO | OK
 enum.Domain       : figures | grant
 ```

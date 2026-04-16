@@ -1,7 +1,7 @@
 ---
 name: figure-style-extract
 description: Extracts publication figure conventions from a reference paper PDF and its companion script library. Outputs STYLE_GUIDE.md (panel density, typography, color, layout norms) and SCRIPT_CATALOG.yml (visual-primitive → script reference index). Run by /figure-init or standalone when reference materials change.
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, Skill, WebFetch
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, Skill, WebFetch, Agent
 ---
 
 # /figure-style-extract — Layer 2 sub-skill: Reference → Style Spec

@@ -398,15 +398,30 @@ ggplot(df, aes(x = stage, y = effect, group = feature)) +
 Panel 렌더링 + PANEL_REGISTRY append가 끝나면 **반드시 이 turn 내에 Task tool로 figure-reviewer subagent를 spawn**:
 
 ```
+# Model selection logic (per-invocation override):
+#   opus  — granularity=figure (Layer 0-1 cross-panel story arc) OR multimodal=true (Layer 4 rendered vision)
+#   sonnet — granularity=panel (Layer 2-4 content/visual only), multimodal=false
+#
+# figure-reviewer AGENT.md의 default는 sonnet. 아래 model 파라미터가 per-invocation override.
+
+model_choice = "opus" if (granularity == "figure" or multimodal) else "sonnet"
+
 Agent(subagent_type="figure-reviewer", 
+      model=model_choice,
       description="Review Fig{N}",
-      prompt="Review Fig{N} (granularity={figure|panel}) in the current project. 
+      prompt="Review Fig{N} (granularity={granularity}, multimodal={true|false}) in the current project. 
               Read docs_figure/figure_pipeline/design_docs/Fig{N}_design.md, 
               docs/CLAIMS.md, docs_figure/PANEL_REGISTRY.md, 
-              and docs_figure/hook.log if present. 
+              and docs_figure/hook.log if present.
+              {if multimodal: Also read rendered PNG from output/panels/ for Layer 4 vision review.}
               Write one REVIEW_LOG entry per REVIEW_LOG.schema. 
               Return 3-line summary.")
 ```
+
+**Model selection 근거**:
+- `granularity=figure`는 Layer 0 (Story Arc) + Layer 1 (Figure Role) 판단 필요 — narrative reasoning 품질이 중요하므로 opus.
+- `multimodal=true`는 Layer 4 (Rendered Image) — 이미지 인식 정확도가 중요하므로 opus.
+- `granularity=panel`은 Layer 2-4 content/visual check — 구조화된 rule 체크이므로 sonnet 충분.
 
 ### 왜 생략 금지인가
 - figure-implement와 figure-review는 **atomic pair**. implement만 돌고 review가 생략되면 REVIEW_LOG append-only audit trail이 끊어짐.

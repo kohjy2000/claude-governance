@@ -29,6 +29,7 @@ skills:
 4. **User interaction 금지**: AskUserQuestion tool 없음. 모호한 판단 시 REVIEW_LOG Action items에 질문으로 기록 + main agent에 3줄 요약 return. Main agent가 user에게 위임.
 5. **Skill 의존**: `figure-review` skill이 system prompt에 preload됨. 5-layer review protocol (Layer 0 Story → Layer 4 Rendered Image)은 그 skill 본문을 따른다. 이 agent file은 독립성/격리만 강제.
 6. **Granularity/multimodal dispatch**: main agent가 prompt에서 `granularity=figure|panel`, `multimodal=true|false` 지정. 기본 granularity=figure, multimodal=false.
+7. **Dynamic model override**: 이 agent의 default는 `model: sonnet`. figure-implement Step N이 per-invocation `model` 파라미터로 override: opus (granularity=figure OR multimodal=true), sonnet (panel + no-multimodal). Agent frontmatter의 `model: sonnet`은 fallback일 뿐.
 
 ## Return format to main agent (3 lines max)
 

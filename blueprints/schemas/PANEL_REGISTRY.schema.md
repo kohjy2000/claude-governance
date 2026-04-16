@@ -1,7 +1,7 @@
 # PANEL_REGISTRY.md Schema v1.0
 
 > **Primary consumer**: `figure-implement` (writes), `figure-assemble` (reads to pick variants).
-> **Location**: `<project>/outputs/figures/PANEL_REGISTRY.md`.
+> **Location**: `<project>/docs_figure/PANEL_REGISTRY.md` (Phase 6+). Legacy: `<project>/outputs/figures/PANEL_REGISTRY.md`.
 > **Purpose**: 각 panel의 variant 중 무엇을 선택했는지, 어느 이미지 파일이 canonical인지 기록. Reproducibility + review trail.
 
 ---
