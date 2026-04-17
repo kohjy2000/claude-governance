@@ -46,6 +46,21 @@
             "type": "command",
             "command": "~/.claude/hooks/guard-assert-fail.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/guard-panel-review.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/guard-panel-review.sh",
+            "timeout": 5
           }
         ]
       },

@@ -70,5 +70,43 @@ WARN
   exit 0
 fi
 
+# Check 3: Catalog ref script 읽었는지 확인
+# Figure 관련 R/Python이면, 해당 figure의 design doc에 catalog_ref가 있는지,
+# 있으면 그 script를 이 세션에서 Read했는지 확인
+if [ -n "$FIG_NUM" ]; then
+  # 프로젝트 root 탐색
+  PROJECT_ROOT=""
+  DIR=$(dirname "$FILE_PATH")
+  while [ "$DIR" != "/" ]; do
+    if [ -d "$DIR/docs_figure" ] || [ -d "$DIR/docs" ]; then
+      PROJECT_ROOT="$DIR"
+      break
+    fi
+    DIR=$(dirname "$DIR")
+  done
+
+  if [ -n "$PROJECT_ROOT" ]; then
+    DESIGN_DOC="$PROJECT_ROOT/docs_figure/figure_pipeline/design_docs/Fig${FIG_NUM}_design.md"
+    if [ -f "$DESIGN_DOC" ]; then
+      # design doc에서 catalog_ref path 추출
+      CATALOG_REFS=$(grep -oP 'path:\s*\K\S+' "$DESIGN_DOC" 2>/dev/null || true)
+      if [ -n "$CATALOG_REFS" ]; then
+        UNREAD_REFS=""
+        for REF in $CATALOG_REFS; do
+          if ! grep -q "$REF" "$SESSION_LOG" 2>/dev/null; then
+            UNREAD_REFS="${UNREAD_REFS} ${REF}"
+          fi
+        done
+        if [ -n "$UNREAD_REFS" ]; then
+          cat <<CATALOG_WARN
+{"additionalContext":"⚠️ CC1 위반 가능: Design doc에 catalog_ref가 명시되어 있지만 이 세션에서 해당 reference script를 읽지 않았습니다:\n${UNREAD_REFS}\n\ncatalog_ref가 있으면 해당 코드를 Read → clone-modify 해야 합니다. from-scratch 작성은 CC1 위반입니다."}
+CATALOG_WARN
+          exit 0
+        fi
+      fi
+    fi
+  fi
+fi
+
 # 모든 체크 통과
 exit 0
