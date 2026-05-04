@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# governance-sync: merge global + machine-specific CLAUDE.md into ~/.claude/CLAUDE.md
+# Usage: governance-sync [--dry-run]
+
+set -euo pipefail
+
+REPO_DIR="$HOME/claude-governance"
+GLOBAL_FILE="$REPO_DIR/global/CLAUDE_portable.md"
+MACHINES_DIR="$REPO_DIR/machines"
+TARGET="$HOME/.claude/CLAUDE.md"
+
+# Detect machine
+detect_machine() {
+    local h
+    h="$(hostname -s 2>/dev/null || hostname)"
+    case "$h" in
+        c2*|*tscc*|*login*) echo "tscc" ;;
+        *)                  echo "$h" ;;
+    esac
+}
+
+MACHINE="${GOVERNANCE_MACHINE:-$(detect_machine)}"
+MACHINE_FILE="$MACHINES_DIR/$MACHINE.md"
+
+echo "[governance-sync] machine = $MACHINE"
+echo "[governance-sync] global  = $GLOBAL_FILE"
+
+if [[ ! -f "$GLOBAL_FILE" ]]; then
+    echo "[governance-sync] ERROR: global file not found: $GLOBAL_FILE" >&2
+    exit 1
+fi
+
+TMP="$(mktemp)"
+trap 'rm -f "$TMP"' EXIT
+cat "$GLOBAL_FILE" > "$TMP"
+
+if [[ -f "$MACHINE_FILE" ]]; then
+    echo "[governance-sync] machine = $MACHINE_FILE (found, appending)"
+    echo "" >> "$TMP"
+    cat "$MACHINE_FILE" >> "$TMP"
+else
+    echo "[governance-sync] machine = $MACHINE_FILE (not found, global only)"
+fi
+
+if [[ "${1:-}" == "--dry-run" ]]; then
+    echo "[governance-sync] --dry-run: target preview below"
+    echo "----------------------------------------"
+    cat "$TMP"
+    echo "----------------------------------------"
+    exit 0
+fi
+
+mkdir -p "$(dirname "$TARGET")"
+if [[ -f "$TARGET" ]]; then
+    BACKUP="$TARGET.bak.$(date +%Y%m%d-%H%M%S)"
+    cp "$TARGET" "$BACKUP"
+    echo "[governance-sync] backup = $BACKUP"
+fi
+
+cp "$TMP" "$TARGET"
+echo "[governance-sync] applied → $TARGET ($(wc -l < "$TARGET") lines)"

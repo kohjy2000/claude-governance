@@ -75,6 +75,8 @@
 
 ## 행동 원칙
 - 가정하지 마. 불확실하면 멈추고 물어.
+- 모르면 "모름" 명시. 추측 불가피 → "speculation:" 접두어.
+- 검증 안 된 가정 → 코드에 TODO/FIXME.
 - 여러 해석이 있으면 제시하고 조용히 고르지 마.
 - 최소 코드. 추상화/유연성/speculative feature 없이. 요청받은 것만.
 - Surgical changes. 인접 코드/주석/포맷 건들지 마.
@@ -100,10 +102,32 @@
 ## 재현성 (Reproducibility)
 - 모든 분석은 스크립트로 남길 것. interactive 실행 → 스크립트화 필수.
 - 스크립트 대폭 변경 → 버전업 (v09 → v10). 기존 버전 보존.
+- SLURM 제출 시 정확한 명령어/파라미터를 JOB_LOG.md에 기록.
 - CLAIMS.md의 `Source script` 필드는 항상 재생 가능한 script path. Notebook cell은 `path` 수준에서 허용, 안정화되면 `path:line`으로 승격.
 
+## 검증 컨벤션
+- Python: pytest 우선. interactive 검증 → 스크립트화 후 재현.
+- 새 함수 → 최소 1개 test case 동반.
+- 검증 없이 "완료" 보고 금지.
+- 버그 수정 → 재현 테스트 먼저, 수정 다음.
+
+## 컨텍스트 관리
+- /context로 사용량 주기적 확인.
+- 50% 도달 → /compact 또는 새 세션 + /session-resume.
+- 작업 분기 변경 → /clear로 리셋.
+
+## 민감 정보
+- 환자 식별정보(PHI), 임상 데이터는 코드/로그에 직접 노출 금지.
+- API key, token, password → 환경변수 또는 .env (gitignore 필수).
+- 데이터 경로는 DATA_MAP.md 참조. 하드코딩 회피.
+
+## 언어
+- 사용자 대화/설명: 한국어 기본.
+- 코드 주석/docstring/변수명: 영어.
+- 문서(README, STORY 등): 영어 기본, 한국어 허용.
+
 ## 상태 점검
-- 간결하게. 빠르게 확인.
+- 간결하게. `sacct` + 로그 tail로 빠르게 확인.
 - 문제 없으면 길게 설명하지 말 것.
 - 문제 발견 → 원인 파악 → 수정안 제시 → 확인 후 실행.
 
@@ -113,6 +137,6 @@
 - 패턴/교훈 → memory/ 주제별 파일. 짧게.
 
 ## Governance sync
-- 이 파일의 소스는 `~/code/claude-governance/global/CLAUDE_portable.md`.
+- 이 파일의 소스는 `~/claude-governance/global/CLAUDE_portable.md`.
 - `~/.claude/CLAUDE.md`는 `bootstrap-system` 또는 `governance-sync`가 생성한 복사본 — 직접 편집 지양.
 - 수정은 source에서 → commit → push → 다른 머신에서 pull + rsync.
