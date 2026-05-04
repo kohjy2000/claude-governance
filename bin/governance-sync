@@ -1,13 +1,52 @@
 #!/usr/bin/env bash
-# governance-sync: merge global + machine-specific CLAUDE.md into ~/.claude/CLAUDE.md
-# Usage: governance-sync [--dry-run]
+# governance-sync: merge global + machine-specific instructions
+# into ~/.claude/CLAUDE.md and/or ~/.codex/AGENTS.md
+#
+# Usage:
+#   governance-sync                # sync both (default)
+#   governance-sync --claude       # sync CLAUDE only
+#   governance-sync --codex        # sync AGENTS (Codex) only
+#   governance-sync --all          # sync both (explicit)
+#   governance-sync --dry-run      # preview without writing
+#   (flags can combine: --codex --dry-run)
 
 set -euo pipefail
 
 REPO_DIR="$HOME/claude-governance"
-GLOBAL_FILE="$REPO_DIR/global/CLAUDE_portable.md"
 MACHINES_DIR="$REPO_DIR/machines"
-TARGET="$HOME/.claude/CLAUDE.md"
+
+# Parse flags
+SYNC_CLAUDE=0
+SYNC_CODEX=0
+DRY_RUN=0
+
+if [[ $# -eq 0 ]]; then
+    SYNC_CLAUDE=1
+    SYNC_CODEX=1
+fi
+
+for arg in "$@"; do
+    case "$arg" in
+        --claude)  SYNC_CLAUDE=1 ;;
+        --codex)   SYNC_CODEX=1 ;;
+        --all)     SYNC_CLAUDE=1; SYNC_CODEX=1 ;;
+        --dry-run) DRY_RUN=1 ;;
+        -h|--help)
+            grep '^#' "$0" | sed 's/^# \?//'
+            exit 0
+            ;;
+        *)
+            echo "[governance-sync] ERROR: unknown flag: $arg" >&2
+            exit 2
+            ;;
+    esac
+done
+
+# If no target flag given (only --dry-run), default to both
+if [[ $SYNC_CLAUDE -eq 0 && $SYNC_CODEX -eq 0 ]]; then
+    SYNC_CLAUDE=1
+    SYNC_CODEX=1
+fi
 
 # Detect machine
 detect_machine() {
@@ -23,39 +62,82 @@ MACHINE="${GOVERNANCE_MACHINE:-$(detect_machine)}"
 MACHINE_FILE="$MACHINES_DIR/$MACHINE.md"
 
 echo "[governance-sync] machine = $MACHINE"
-echo "[governance-sync] global  = $GLOBAL_FILE"
+[[ $DRY_RUN -eq 1 ]] && echo "[governance-sync] mode    = dry-run"
 
-if [[ ! -f "$GLOBAL_FILE" ]]; then
-    echo "[governance-sync] ERROR: global file not found: $GLOBAL_FILE" >&2
-    exit 1
+# Helper: build merged content for a target
+build_merged() {
+    local global_file="$1"
+    local out="$2"
+
+    if [[ ! -f "$global_file" ]]; then
+        echo "[governance-sync] ERROR: global file not found: $global_file" >&2
+        return 1
+    fi
+
+    cat "$global_file" > "$out"
+
+    if [[ -f "$MACHINE_FILE" ]]; then
+        echo "" >> "$out"
+        cat "$MACHINE_FILE" >> "$out"
+    fi
+}
+
+# Helper: apply (or preview) a target
+apply_target() {
+    local label="$1"
+    local global_file="$2"
+    local target="$3"
+
+    echo ""
+    echo "[governance-sync] === $label ==="
+    echo "[governance-sync] global  = $global_file"
+
+    if [[ -f "$MACHINE_FILE" ]]; then
+        echo "[governance-sync] machine = $MACHINE_FILE (found, appending)"
+    else
+        echo "[governance-sync] machine = $MACHINE_FILE (not found, global only)"
+    fi
+
+    local tmp
+    tmp="$(mktemp)"
+    if ! build_merged "$global_file" "$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
+
+    if [[ $DRY_RUN -eq 1 ]]; then
+        echo "[governance-sync] target  = $target ($(wc -l < "$tmp") lines, would-be content below)"
+        echo "----------------------------------------"
+        cat "$tmp"
+        echo "----------------------------------------"
+        rm -f "$tmp"
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$target")"
+    if [[ -f "$target" ]]; then
+        local backup="$target.bak.$(date +%Y%m%d-%H%M%S)"
+        cp "$target" "$backup"
+        echo "[governance-sync] backup  = $backup"
+    fi
+
+    cp "$tmp" "$target"
+    rm -f "$tmp"
+    echo "[governance-sync] applied -> $target ($(wc -l < "$target") lines)"
+}
+
+# Run targets
+if [[ $SYNC_CLAUDE -eq 1 ]]; then
+    apply_target "CLAUDE" \
+        "$REPO_DIR/global/CLAUDE_portable.md" \
+        "$HOME/.claude/CLAUDE.md"
 fi
 
-TMP="$(mktemp)"
-trap 'rm -f "$TMP"' EXIT
-cat "$GLOBAL_FILE" > "$TMP"
-
-if [[ -f "$MACHINE_FILE" ]]; then
-    echo "[governance-sync] machine = $MACHINE_FILE (found, appending)"
-    echo "" >> "$TMP"
-    cat "$MACHINE_FILE" >> "$TMP"
-else
-    echo "[governance-sync] machine = $MACHINE_FILE (not found, global only)"
+if [[ $SYNC_CODEX -eq 1 ]]; then
+    apply_target "CODEX" \
+        "$REPO_DIR/global/AGENTS_portable.md" \
+        "$HOME/.codex/AGENTS.md"
 fi
 
-if [[ "${1:-}" == "--dry-run" ]]; then
-    echo "[governance-sync] --dry-run: target preview below"
-    echo "----------------------------------------"
-    cat "$TMP"
-    echo "----------------------------------------"
-    exit 0
-fi
-
-mkdir -p "$(dirname "$TARGET")"
-if [[ -f "$TARGET" ]]; then
-    BACKUP="$TARGET.bak.$(date +%Y%m%d-%H%M%S)"
-    cp "$TARGET" "$BACKUP"
-    echo "[governance-sync] backup = $BACKUP"
-fi
-
-cp "$TMP" "$TARGET"
-echo "[governance-sync] applied → $TARGET ($(wc -l < "$TARGET") lines)"
+echo ""
+echo "[governance-sync] done."
