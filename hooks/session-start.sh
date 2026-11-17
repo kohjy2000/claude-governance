@@ -72,8 +72,8 @@ fi
 
 # Figure pipeline 상태
 if [ -d "$PROJECT_ROOT/docs_figure" ]; then
-  DESIGN_COUNT=$(find "$PROJECT_ROOT/docs_figure/figure_pipeline/design_docs" -name "Fig*_design.md" 2>/dev/null | wc -l)
-  PANEL_COUNT=$(find "$PROJECT_ROOT/output/panels" -name "*.png" -o -name "*.pdf" 2>/dev/null | wc -l)
+  DESIGN_COUNT=$(find "$PROJECT_ROOT/docs_figure/figure_pipeline/design_docs" -name "Fig*_design.md" 2>/dev/null | wc -l || true)
+  PANEL_COUNT=$(find "$PROJECT_ROOT/output/panels" -name "*.png" -o -name "*.pdf" 2>/dev/null | wc -l || true)
   echo "🎨 Figure Pipeline: ${DESIGN_COUNT} design docs, ${PANEL_COUNT} rendered panels"
 
   # PANEL_REGISTRY 요약
